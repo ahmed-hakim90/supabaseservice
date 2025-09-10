@@ -3,8 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./drizzle-storage";
 import { z } from "zod";
 import bcrypt from "bcrypt";
-import { 
-  insertUserSchema, 
+import {
+  insertUserSchema,
   insertServiceCenterSchema,
   insertCustomerSchema,
   insertCategorySchema,
@@ -17,7 +17,7 @@ import {
   insertProductInventorySchema,
   insertPartsTransferSchema,
   insertActivityLogSchema,
-  type User
+  type User,
 } from "@shared/schema";
 
 // Helper function to get current user from session
@@ -25,62 +25,94 @@ async function getCurrentUser(req: any): Promise<User | null> {
   if (!req.session?.user?.id) {
     return null;
   }
-  return await storage.getUser(req.session.user.id) || null;
+  return (await storage.getUser(req.session.user.id)) || null;
 }
 
 // Helper function to check if user can access data based on role and center
 function canAccessData(user: User, resourceType: string, data?: any): boolean {
-  if (user.role === 'admin') {
+  if (user.role === "admin") {
     return true; // Admin can access everything
   }
-  
+
   // Manager can only access their center's data
-  if (user.role === 'manager') {
-    if (resourceType === 'user' && data?.centerId && data.centerId !== user.centerId) {
+  if (user.role === "manager") {
+    if (
+      resourceType === "user" &&
+      data?.centerId &&
+      data.centerId !== user.centerId
+    ) {
       return false;
     }
-    if (resourceType === 'serviceRequest' && data?.centerId && data.centerId !== user.centerId) {
+    if (
+      resourceType === "serviceRequest" &&
+      data?.centerId &&
+      data.centerId !== user.centerId
+    ) {
       return false;
     }
-    if (resourceType === 'warehouse' && data?.centerId && data.centerId !== user.centerId) {
+    if (
+      resourceType === "warehouse" &&
+      data?.centerId &&
+      data.centerId !== user.centerId
+    ) {
       return false;
     }
-    if (resourceType === 'customer' && data?.centerId && data.centerId !== user.centerId) {
+    if (
+      resourceType === "customer" &&
+      data?.centerId &&
+      data.centerId !== user.centerId
+    ) {
       return false;
     }
   }
-  
+
   // Technician can only access their assigned service requests
-  if (user.role === 'technician') {
-    if (resourceType === 'serviceRequest' && data?.technicianId && data.technicianId !== user.id) {
+  if (user.role === "technician") {
+    if (
+      resourceType === "serviceRequest" &&
+      data?.technicianId &&
+      data.technicianId !== user.id
+    ) {
       return false;
     }
   }
-  
+
   // Warehouse manager can only access their warehouse data
-  if (user.role === 'warehouse_manager') {
-    if (resourceType === 'warehouse' && data?.managerId && data.managerId !== user.id) {
+  if (user.role === "warehouse_manager") {
+    if (
+      resourceType === "warehouse" &&
+      data?.managerId &&
+      data.managerId !== user.id
+    ) {
       return false;
     }
   }
-  
+
   // Customer can only access their own data
-  if (user.role === 'customer') {
-    if (resourceType === 'serviceRequest' && data?.customerId && data.customerId !== user.id) {
+  if (user.role === "customer") {
+    if (
+      resourceType === "serviceRequest" &&
+      data?.customerId &&
+      data.customerId !== user.id
+    ) {
       return false;
     }
   }
-  
+
   return true;
 }
 
 // Helper function to filter data based on user role
-function filterDataForUser(user: User, resourceType: string, data: any[]): any[] {
-  if (user.role === 'admin') {
+function filterDataForUser(
+  user: User,
+  resourceType: string,
+  data: any[],
+): any[] {
+  if (user.role === "admin") {
     return data; // Admin sees everything
   }
-  
-  return data.filter(item => canAccessData(user, resourceType, item));
+
+  return data.filter((item) => canAccessData(user, resourceType, item));
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -88,9 +120,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { email, password } = req.body;
-      
+
       if (!email || !password) {
-        return res.status(400).json({ message: "البريد الإلكتروني وكلمة المرور مطلوبان" });
+        return res
+          .status(400)
+          .json({ message: "البريد الإلكتروني وكلمة المرور مطلوبان" });
       }
 
       // Temporary admin user fallback if database is not connected
@@ -106,7 +140,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: "active" as const,
           centerId: null,
           createdAt: new Date(),
-          updatedAt: new Date()
+          updatedAt: new Date(),
         };
 
         // Store user in session
@@ -133,8 +167,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "بيانات الدخول غير صحيحة" });
       }
 
-      if (user.status !== 'active') {
-        return res.status(401).json({ message: "الحساب غير مفعل، يرجى انتظار موافقة المسؤول" });
+      if (user.status !== "active") {
+        return res
+          .status(401)
+          .json({ message: "الحساب غير مفعل، يرجى انتظار موافقة المسؤول" });
       }
 
       // Store user in session
@@ -147,7 +183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           action: "login",
           entityType: "user",
           entityId: user.id,
-          description: `تم تسجيل الدخول للمستخدم ${user.fullName}`
+          description: `تم تسجيل الدخول للمستخدم ${user.fullName}`,
         });
       } catch (logError) {
         console.warn("Could not log activity:", logError);
@@ -163,7 +199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/register", async (req, res) => {
     try {
       const userData = insertUserSchema.parse(req.body);
-      
+
       // Check if user already exists
       const existingUser = await storage.getUserByEmail(userData.email);
       if (existingUser) {
@@ -172,12 +208,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Hash password before storing
       const hashedPassword = await bcrypt.hash(userData.password, 10);
-      
+
       // Create user with pending status
       const user = await storage.createUser({
         ...userData,
         password: hashedPassword,
-        status: 'pending'
+        status: "pending",
       });
 
       // Log activity
@@ -186,14 +222,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "register",
         entityType: "user",
         entityId: user.id,
-        description: `تم تسجيل مستخدم جديد: ${user.fullName}`
+        description: `تم تسجيل مستخدم جديد: ${user.fullName}`,
       });
 
-      res.status(201).json({ message: "تم إنشاء الحساب بنجاح، في انتظار الموافقة" });
+      res
+        .status(201)
+        .json({ message: "تم إنشاء الحساب بنجاح، في انتظار الموافقة" });
     } catch (error) {
       console.error("Registration error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في الخادم" });
     }
@@ -211,7 +251,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         allUsers = await storage.getAllUsers();
       } catch (dbError) {
-        console.error("Database connection error while fetching users:", dbError);
+        console.error(
+          "Database connection error while fetching users:",
+          dbError,
+        );
         // Return empty array when database is not available
         return res.json([]);
       }
@@ -219,12 +262,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let filteredUsers = allUsers;
 
       // Filter users based on role
-      if (currentUser.role === 'manager') {
+      if (currentUser.role === "manager") {
         // Manager can only see users in their center
-        filteredUsers = allUsers.filter(user => user.centerId === currentUser.centerId);
-      } else if (currentUser.role !== 'admin') {
+        filteredUsers = allUsers.filter(
+          (user) => user.centerId === currentUser.centerId,
+        );
+      } else if (currentUser.role !== "admin") {
         // Non-admin and non-manager roles cannot view other users
-        return res.status(403).json({ message: "ليس لديك صلاحية لعرض المستخدمين" });
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لعرض المستخدمين" });
       }
 
       res.json(filteredUsers);
@@ -250,7 +297,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/users", async (req, res) => {
     try {
       const userData = insertUserSchema.parse(req.body);
-      
+
       // Check if user already exists (with database fallback)
       let existingUser;
       try {
@@ -258,28 +305,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (dbError) {
         console.error("Database connection error during user check:", dbError);
         // Return a temporary response when database is not available
-        return res.status(503).json({ 
-          message: "قاعدة البيانات غير متاحة حالياً. يرجى المحاولة مرة أخرى لاحقاً." 
+        return res.status(503).json({
+          message:
+            "قاعدة البيانات غير متاحة حالياً. يرجى المحاولة مرة أخرى لاحقاً.",
         });
       }
-      
+
       if (existingUser) {
         return res.status(400).json({ message: "المستخدم موجود بالفعل" });
       }
 
       // Hash password before storing
       const hashedPassword = await bcrypt.hash(userData.password, 10);
-      
+
       let user;
       try {
         user = await storage.createUser({
           ...userData,
-          password: hashedPassword
+          password: hashedPassword,
         });
       } catch (dbError) {
-        console.error("Database connection error during user creation:", dbError);
-        return res.status(503).json({ 
-          message: "قاعدة البيانات غير متاحة حالياً. يرجى المحاولة مرة أخرى لاحقاً." 
+        console.error(
+          "Database connection error during user creation:",
+          dbError,
+        );
+        return res.status(503).json({
+          message:
+            "قاعدة البيانات غير متاحة حالياً. يرجى المحاولة مرة أخرى لاحقاً.",
         });
       }
 
@@ -290,7 +342,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           action: "create",
           entityType: "user",
           entityId: user.id,
-          description: `تم إضافة مستخدم جديد: ${user.fullName}`
+          description: `تم إضافة مستخدم جديد: ${user.fullName}`,
         });
       } catch (logError) {
         console.warn("Could not log activity:", logError);
@@ -300,7 +352,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Create user error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في إضافة المستخدم" });
     }
@@ -317,14 +371,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "update",
         entityType: "user",
         entityId: user.id,
-        description: `تم تحديث بيانات المستخدم: ${user.fullName}`
+        description: `تم تحديث بيانات المستخدم: ${user.fullName}`,
       });
 
       res.json(user);
     } catch (error) {
       console.error("Update user error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في تحديث المستخدم" });
     }
@@ -345,7 +401,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "delete",
         entityType: "user",
         entityId: req.params.id,
-        description: `تم حذف المستخدم: ${user.fullName}`
+        description: `تم حذف المستخدم: ${user.fullName}`,
       });
 
       res.json({ message: "تم حذف المستخدم بنجاح" });
@@ -370,12 +426,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const centers = await storage.getAllServiceCenters();
-      const center = centers.find(c => c.id === id);
-      
+      const center = centers.find((c) => c.id === id);
+
       if (!center) {
         return res.status(404).json({ message: "المركز غير موجود" });
       }
-      
+
       res.json(center);
     } catch (error) {
       console.error("Get service center error:", error);
@@ -390,18 +446,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Log activity
       await storage.logActivity({
-        userId: center.managerId || '',
+        userId: center.managerId || "",
         action: "create",
         entityType: "service_center",
         entityId: center.id,
-        description: `تم إضافة مركز خدمة جديد: ${center.name}`
+        description: `تم إضافة مركز خدمة جديد: ${center.name}`,
       });
 
       res.status(201).json(center);
     } catch (error) {
       console.error("Create service center error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في إضافة مركز الخدمة" });
     }
@@ -410,22 +468,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/service-centers/:id", async (req, res) => {
     try {
       const centerData = insertServiceCenterSchema.partial().parse(req.body);
-      const center = await storage.updateServiceCenter(req.params.id, centerData);
+      const center = await storage.updateServiceCenter(
+        req.params.id,
+        centerData,
+      );
 
       // Log activity
       await storage.logActivity({
-        userId: center.managerId || '',
+        userId: center.managerId || "",
         action: "update",
         entityType: "service_center",
         entityId: center.id,
-        description: `تم تحديث مركز الخدمة: ${center.name}`
+        description: `تم تحديث مركز الخدمة: ${center.name}`,
       });
 
       res.json(center);
     } catch (error) {
       console.error("Update service center error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في تحديث مركز الخدمة" });
     }
@@ -442,11 +505,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Log activity
       await storage.logActivity({
-        userId: center.managerId || '',
+        userId: center.managerId || "",
         action: "delete",
         entityType: "service_center",
         entityId: req.params.id,
-        description: `تم حذف مركز الخدمة: ${center.name}`
+        description: `تم حذف مركز الخدمة: ${center.name}`,
       });
 
       res.json({ message: "تم حذف مركز الخدمة بنجاح" });
@@ -468,18 +531,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let filteredCustomers = allCustomers;
 
       // Filter customers based on role
-      if (currentUser.role === 'manager' || currentUser.role === 'receptionist') {
+      if (
+        currentUser.role === "manager" ||
+        currentUser.role === "receptionist"
+      ) {
         // Manager and receptionist can see customers from their center only
-        filteredCustomers = allCustomers.filter(customer => customer.centerId === currentUser.centerId);
-      } else if (currentUser.role === 'technician') {
+        filteredCustomers = allCustomers.filter(
+          (customer) => customer.centerId === currentUser.centerId,
+        );
+      } else if (currentUser.role === "technician") {
         // Technician can see customers from their center only
-        filteredCustomers = allCustomers.filter(customer => customer.centerId === currentUser.centerId);
-      } else if (currentUser.role === 'customer') {
+        filteredCustomers = allCustomers.filter(
+          (customer) => customer.centerId === currentUser.centerId,
+        );
+      } else if (currentUser.role === "customer") {
         // Customer can only see their own data
-        filteredCustomers = allCustomers.filter(customer => customer.id === currentUser.id);
-      } else if (currentUser.role === 'warehouse_manager') {
+        filteredCustomers = allCustomers.filter(
+          (customer) => customer.id === currentUser.id,
+        );
+      } else if (currentUser.role === "warehouse_manager") {
         // Warehouse manager doesn't need customer access
-        return res.status(403).json({ message: "ليس لديك صلاحية لعرض العملاء" });
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لعرض العملاء" });
       }
 
       res.json(filteredCustomers);
@@ -497,17 +571,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check permissions
-      if (currentUser.role === 'customer' || currentUser.role === 'warehouse_manager') {
-        return res.status(403).json({ message: "ليس لديك صلاحية لإضافة عملاء" });
+      if (
+        currentUser.role === "customer" ||
+        currentUser.role === "warehouse_manager"
+      ) {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لإضافة عملاء" });
       }
 
       const customerData = insertCustomerSchema.parse(req.body);
-      
+
       // Auto-assign centerId based on user's center
       if (currentUser.centerId) {
         customerData.centerId = currentUser.centerId;
       }
-      
+
       const customer = await storage.createCustomer(customerData);
 
       // Log activity
@@ -516,14 +595,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "create",
         entityType: "customer",
         entityId: customer.id,
-        description: `تم إضافة عميل جديد: ${customer.fullName}`
+        description: `تم إضافة عميل جديد: ${customer.fullName}`,
       });
 
       res.status(201).json(customer);
     } catch (error) {
       console.error("Create customer error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في إضافة العميل" });
     }
@@ -532,22 +613,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/customers/:id", async (req, res) => {
     try {
       const customerData = insertCustomerSchema.partial().parse(req.body);
-      const customer = await storage.updateCustomer(req.params.id, customerData);
+      const customer = await storage.updateCustomer(
+        req.params.id,
+        customerData,
+      );
 
       // Log activity
       await storage.logActivity({
-        userId: '',
+        userId: "",
         action: "update",
         entityType: "customer",
         entityId: customer.id,
-        description: `تم تحديث بيانات العميل: ${customer.fullName}`
+        description: `تم تحديث بيانات العميل: ${customer.fullName}`,
       });
 
       res.json(customer);
     } catch (error) {
       console.error("Update customer error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في تحديث العميل" });
     }
@@ -564,11 +650,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Log activity
       await storage.logActivity({
-        userId: '',
+        userId: "",
         action: "delete",
         entityType: "customer",
         entityId: req.params.id,
-        description: `تم حذف العميل: ${customer.fullName}`
+        description: `تم حذف العميل: ${customer.fullName}`,
       });
 
       res.json({ message: "تم حذف العميل بنجاح" });
@@ -593,8 +679,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check permissions
-      if (!canAccessData(currentUser, 'serviceRequest', serviceRequest)) {
-        return res.status(403).json({ message: "ليس لديك صلاحية لعرض متابعات هذا الطلب" });
+      if (!canAccessData(currentUser, "serviceRequest", serviceRequest)) {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لعرض متابعات هذا الطلب" });
       }
 
       const followUps = await storage.getServiceRequestFollowUps(req.params.id);
@@ -613,8 +701,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if user can add follow-ups (only technicians)
-      if (currentUser.role !== 'technician') {
-        return res.status(403).json({ message: "فقط الفنيين يمكنهم إضافة متابعات" });
+      if (currentUser.role !== "technician") {
+        return res
+          .status(403)
+          .json({ message: "فقط الفنيين يمكنهم إضافة متابعات" });
       }
 
       // Check if this service request exists and is assigned to the technician
@@ -624,14 +714,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (serviceRequest.technicianId !== currentUser.id) {
-        return res.status(403).json({ message: "يمكنك إضافة متابعات فقط للطلبات المسندة إليك" });
+        return res
+          .status(403)
+          .json({ message: "يمكنك إضافة متابعات فقط للطلبات المسندة إليك" });
       }
 
       const followUpData = insertServiceRequestFollowUpSchema.parse({
         serviceRequestId: req.params.id,
         technicianId: currentUser.id,
         followUpText: req.body.followUpText,
-        newStatus: req.body.newStatus
+        newStatus: req.body.newStatus,
       });
 
       const followUp = await storage.createServiceRequestFollowUp(followUpData);
@@ -641,20 +733,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const updateData = {
           status: followUpData.newStatus,
           updatedAt: new Date(),
-          ...(followUpData.newStatus === 'completed' ? { completedAt: new Date() } : {})
+          ...(followUpData.newStatus === "completed"
+            ? { completedAt: new Date() }
+            : {}),
         };
         await storage.updateServiceRequest(req.params.id, updateData);
 
         // Log status change activity
-        const statusText = followUpData.newStatus === 'completed' ? 'مكتمل' : 
-                          followUpData.newStatus === 'in_progress' ? 'قيد التقدم' : 
-                          followUpData.newStatus === 'pending' ? 'في الانتظار' : 'ملغي';
+        const statusText =
+          followUpData.newStatus === "completed"
+            ? "مكتمل"
+            : followUpData.newStatus === "in_progress"
+              ? "قيد التقدم"
+              : followUpData.newStatus === "pending"
+                ? "في الانتظار"
+                : "ملغي";
         await storage.logActivity({
           userId: currentUser.id,
           action: "update",
           entityType: "service_request",
           entityId: req.params.id,
-          description: `تم تحديث حالة طلب الصيانة ${serviceRequest.requestNumber} إلى ${statusText}`
+          description: `تم تحديث حالة طلب الصيانة ${serviceRequest.requestNumber} إلى ${statusText}`,
         });
       }
 
@@ -664,14 +763,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "create",
         entityType: "service_request_follow_up",
         entityId: followUp.id,
-        description: `تم إضافة متابعة لطلب الصيانة: ${serviceRequest.requestNumber}`
+        description: `تم إضافة متابعة لطلب الصيانة: ${serviceRequest.requestNumber}`,
       });
 
       res.status(201).json(followUp);
     } catch (error) {
       console.error("Create follow-up error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في إضافة المتابعة" });
     }
@@ -689,15 +790,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let filteredWarehouses = allWarehouses;
 
       // Filter warehouses based on role
-      if (currentUser.role === 'manager') {
+      if (currentUser.role === "manager") {
         // Manager can only see warehouses in their center
-        filteredWarehouses = allWarehouses.filter(warehouse => warehouse.centerId === currentUser.centerId);
-      } else if (currentUser.role === 'warehouse_manager') {
+        filteredWarehouses = allWarehouses.filter(
+          (warehouse) => warehouse.centerId === currentUser.centerId,
+        );
+      } else if (currentUser.role === "warehouse_manager") {
         // Warehouse manager can only see warehouses they manage
-        filteredWarehouses = allWarehouses.filter(warehouse => warehouse.managerId === currentUser.id);
-      } else if (currentUser.role !== 'admin') {
+        filteredWarehouses = allWarehouses.filter(
+          (warehouse) => warehouse.managerId === currentUser.id,
+        );
+      } else if (currentUser.role !== "admin") {
         // Other roles cannot access warehouses
-        return res.status(403).json({ message: "ليس لديك صلاحية لعرض المخازن" });
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لعرض المخازن" });
       }
 
       res.json(filteredWarehouses);
@@ -715,8 +822,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check permissions - only admin can create warehouses
-      if (currentUser.role !== 'admin') {
-        return res.status(403).json({ message: "ليس لديك صلاحية لإضافة مخازن" });
+      if (currentUser.role !== "admin") {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لإضافة مخازن" });
       }
 
       const warehouseData = insertWarehouseSchema.parse(req.body);
@@ -728,14 +837,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "create",
         entityType: "warehouse",
         entityId: warehouse.id,
-        description: `تم إضافة مخزن جديد: ${warehouse.name}`
+        description: `تم إضافة مخزن جديد: ${warehouse.name}`,
       });
 
       res.status(201).json(warehouse);
     } catch (error) {
       console.error("Create warehouse error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في إضافة المخزن" });
     }
@@ -754,18 +865,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check permissions
-      if (currentUser.role === 'manager' && warehouse.centerId !== currentUser.centerId) {
-        return res.status(403).json({ message: "ليس لديك صلاحية لتعديل هذا المخزن" });
+      if (
+        currentUser.role === "manager" &&
+        warehouse.centerId !== currentUser.centerId
+      ) {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لتعديل هذا المخزن" });
       }
-      if (currentUser.role === 'warehouse_manager' && warehouse.managerId !== currentUser.id) {
-        return res.status(403).json({ message: "ليس لديك صلاحية لتعديل هذا المخزن" });
+      if (
+        currentUser.role === "warehouse_manager" &&
+        warehouse.managerId !== currentUser.id
+      ) {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لتعديل هذا المخزن" });
       }
-      if (currentUser.role !== 'admin' && currentUser.role !== 'manager' && currentUser.role !== 'warehouse_manager') {
-        return res.status(403).json({ message: "ليس لديك صلاحية لتعديل المخازن" });
+      if (
+        currentUser.role !== "admin" &&
+        currentUser.role !== "manager" &&
+        currentUser.role !== "warehouse_manager"
+      ) {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لتعديل المخازن" });
       }
 
       const warehouseData = insertWarehouseSchema.partial().parse(req.body);
-      const updatedWarehouse = await storage.updateWarehouse(req.params.id, warehouseData);
+      const updatedWarehouse = await storage.updateWarehouse(
+        req.params.id,
+        warehouseData,
+      );
 
       // Log activity
       await storage.logActivity({
@@ -773,14 +903,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "update",
         entityType: "warehouse",
         entityId: updatedWarehouse.id,
-        description: `تم تحديث المخزن: ${updatedWarehouse.name}`
+        description: `تم تحديث المخزن: ${updatedWarehouse.name}`,
       });
 
       res.json(updatedWarehouse);
     } catch (error) {
       console.error("Update warehouse error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في تحديث المخزن" });
     }
@@ -799,8 +931,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check permissions - only admin can delete warehouses
-      if (currentUser.role !== 'admin') {
-        return res.status(403).json({ message: "ليس لديك صلاحية لحذف المخازن" });
+      if (currentUser.role !== "admin") {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لحذف المخازن" });
       }
 
       await storage.deleteWarehouse(req.params.id);
@@ -811,7 +945,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "delete",
         entityType: "warehouse",
         entityId: req.params.id,
-        description: `تم حذف المخزن: ${warehouse.name}`
+        description: `تم حذف المخزن: ${warehouse.name}`,
       });
 
       res.json({ message: "تم حذف المخزن بنجاح" });
@@ -839,18 +973,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Log activity
       await storage.logActivity({
-        userId: '',
+        userId: "",
         action: "create",
         entityType: "category",
         entityId: category.id,
-        description: `تم إضافة فئة جديدة: ${category.name}`
+        description: `تم إضافة فئة جديدة: ${category.name}`,
       });
 
       res.status(201).json(category);
     } catch (error) {
       console.error("Create category error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في إضافة الفئة" });
     }
@@ -859,22 +995,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/categories/:id", async (req, res) => {
     try {
       const categoryData = insertCategorySchema.partial().parse(req.body);
-      const category = await storage.updateCategory(req.params.id, categoryData);
+      const category = await storage.updateCategory(
+        req.params.id,
+        categoryData,
+      );
 
       // Log activity
       await storage.logActivity({
-        userId: '',
+        userId: "",
         action: "update",
         entityType: "category",
         entityId: category.id,
-        description: `تم تحديث الفئة: ${category.name}`
+        description: `تم تحديث الفئة: ${category.name}`,
       });
 
       res.json(category);
     } catch (error) {
       console.error("Update category error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في تحديث الفئة" });
     }
@@ -891,11 +1032,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Log activity
       await storage.logActivity({
-        userId: '',
+        userId: "",
         action: "delete",
         entityType: "category",
         entityId: req.params.id,
-        description: `تم حذف الفئة: ${category.name}`
+        description: `تم حذف الفئة: ${category.name}`,
       });
 
       res.json({ message: "تم حذف الفئة بنجاح" });
@@ -923,18 +1064,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Log activity
       await storage.logActivity({
-        userId: '',
+        userId: "",
         action: "create",
         entityType: "product",
         entityId: product.id,
-        description: `تم إضافة منتج جديد: ${product.name}`
+        description: `تم إضافة منتج جديد: ${product.name}`,
       });
 
       res.status(201).json(product);
     } catch (error) {
       console.error("Create product error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في إضافة المنتج" });
     }
@@ -947,18 +1090,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Log activity
       await storage.logActivity({
-        userId: '',
+        userId: "",
         action: "update",
         entityType: "product",
         entityId: product.id,
-        description: `تم تحديث المنتج: ${product.name}`
+        description: `تم تحديث المنتج: ${product.name}`,
       });
 
       res.json(product);
     } catch (error) {
       console.error("Update product error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في تحديث المنتج" });
     }
@@ -975,11 +1120,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Log activity
       await storage.logActivity({
-        userId: '',
+        userId: "",
         action: "delete",
         entityType: "product",
         entityId: req.params.id,
-        description: `تم حذف المنتج: ${product.name}`
+        description: `تم حذف المنتج: ${product.name}`,
       });
 
       res.json({ message: "تم حذف المنتج بنجاح" });
@@ -998,8 +1143,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check permissions
-      if (currentUser.role === 'customer') {
-        return res.status(403).json({ message: "ليس لديك صلاحية لعرض المخزون" });
+      if (currentUser.role === "customer") {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لعرض المخزون" });
       }
 
       // Get warehouse to check permissions
@@ -1009,14 +1156,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if user can access this warehouse
-      if (currentUser.role === 'manager' && warehouse.centerId !== currentUser.centerId) {
-        return res.status(403).json({ message: "ليس لديك صلاحية لعرض مخزون هذا المخزن" });
+      if (
+        currentUser.role === "manager" &&
+        warehouse.centerId !== currentUser.centerId
+      ) {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لعرض مخزون هذا المخزن" });
       }
-      if (currentUser.role === 'warehouse_manager' && warehouse.managerId !== currentUser.id) {
-        return res.status(403).json({ message: "ليس لديك صلاحية لعرض مخزون هذا المخزن" });
+      if (
+        currentUser.role === "warehouse_manager" &&
+        warehouse.managerId !== currentUser.id
+      ) {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لعرض مخزون هذا المخزن" });
       }
 
-      const inventory = await storage.getProductInventory(req.params.warehouseId);
+      const inventory = await storage.getProductInventory(
+        req.params.warehouseId,
+      );
       res.json(inventory);
     } catch (error) {
       console.error("Get product inventory error:", error);
@@ -1032,12 +1191,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check permissions
-      if (currentUser.role !== 'admin' && currentUser.role !== 'manager' && currentUser.role !== 'warehouse_manager') {
-        return res.status(403).json({ message: "ليس لديك صلاحية لإضافة مخزون" });
+      if (
+        currentUser.role !== "admin" &&
+        currentUser.role !== "manager" &&
+        currentUser.role !== "warehouse_manager"
+      ) {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لإضافة مخزون" });
       }
 
       const inventoryData = insertProductInventorySchema.parse(req.body);
-      
+
       // Get warehouse to check permissions
       const warehouse = await storage.getWarehouse(inventoryData.warehouseId);
       if (!warehouse) {
@@ -1045,11 +1210,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if user can add to this warehouse
-      if (currentUser.role === 'manager' && warehouse.centerId !== currentUser.centerId) {
-        return res.status(403).json({ message: "ليس لديك صلاحية لإضافة مخزون لهذا المخزن" });
+      if (
+        currentUser.role === "manager" &&
+        warehouse.centerId !== currentUser.centerId
+      ) {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لإضافة مخزون لهذا المخزن" });
       }
-      if (currentUser.role === 'warehouse_manager' && warehouse.managerId !== currentUser.id) {
-        return res.status(403).json({ message: "ليس لديك صلاحية لإضافة مخزون لهذا المخزن" });
+      if (
+        currentUser.role === "warehouse_manager" &&
+        warehouse.managerId !== currentUser.id
+      ) {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لإضافة مخزون لهذا المخزن" });
       }
 
       const inventory = await storage.createProductInventory(inventoryData);
@@ -1060,14 +1235,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "create",
         entityType: "product_inventory",
         entityId: inventory.id,
-        description: `تم إضافة مخزون جديد للمنتج في المخزن`
+        description: `تم إضافة مخزون جديد للمنتج في المخزن`,
       });
 
       res.status(201).json(inventory);
     } catch (error) {
       console.error("Create product inventory error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في إضافة المخزون" });
     }
@@ -1081,12 +1258,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check permissions
-      if (currentUser.role !== 'admin' && currentUser.role !== 'manager' && currentUser.role !== 'warehouse_manager') {
-        return res.status(403).json({ message: "ليس لديك صلاحية لتحديث المخزون" });
+      if (
+        currentUser.role !== "admin" &&
+        currentUser.role !== "manager" &&
+        currentUser.role !== "warehouse_manager"
+      ) {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لتحديث المخزون" });
       }
 
-      const inventoryData = insertProductInventorySchema.partial().parse(req.body);
-      const inventory = await storage.updateProductInventory(req.params.id, inventoryData);
+      const inventoryData = insertProductInventorySchema
+        .partial()
+        .parse(req.body);
+      const inventory = await storage.updateProductInventory(
+        req.params.id,
+        inventoryData,
+      );
 
       // Log activity
       await storage.logActivity({
@@ -1094,14 +1282,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "update",
         entityType: "product_inventory",
         entityId: inventory.id,
-        description: `تم تحديث المخزون`
+        description: `تم تحديث المخزون`,
       });
 
       res.json(inventory);
     } catch (error) {
       console.error("Update product inventory error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في تحديث المخزون" });
     }
@@ -1115,8 +1305,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check permissions - only admin can delete inventory
-      if (currentUser.role !== 'admin') {
-        return res.status(403).json({ message: "ليس لديك صلاحية لحذف المخزون" });
+      if (currentUser.role !== "admin") {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لحذف المخزون" });
       }
 
       await storage.deleteProductInventory(req.params.id);
@@ -1127,7 +1319,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "delete",
         entityType: "product_inventory",
         entityId: req.params.id,
-        description: `تم حذف المخزون`
+        description: `تم حذف المخزون`,
       });
 
       res.json({ message: "تم حذف المخزون بنجاح" });
@@ -1149,21 +1341,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let filteredRequests = allRequests;
 
       // Filter service requests based on role
-      if (currentUser.role === 'manager') {
+      if (currentUser.role === "manager") {
         // Manager can only see requests from their center
-        filteredRequests = allRequests.filter(req => req.centerId === currentUser.centerId);
-      } else if (currentUser.role === 'technician') {
+        filteredRequests = allRequests.filter(
+          (req) => req.centerId === currentUser.centerId,
+        );
+      } else if (currentUser.role === "technician") {
         // Technician can only see requests assigned to them
-        filteredRequests = allRequests.filter(req => req.technicianId === currentUser.id);
-      } else if (currentUser.role === 'receptionist') {
+        filteredRequests = allRequests.filter(
+          (req) => req.technicianId === currentUser.id,
+        );
+      } else if (currentUser.role === "receptionist") {
         // Receptionist can see requests from their center
-        filteredRequests = allRequests.filter(req => req.centerId === currentUser.centerId);
-      } else if (currentUser.role === 'customer') {
+        filteredRequests = allRequests.filter(
+          (req) => req.centerId === currentUser.centerId,
+        );
+      } else if (currentUser.role === "customer") {
         // Customer can only see their own requests
-        filteredRequests = allRequests.filter(req => req.customerId === currentUser.id);
-      } else if (currentUser.role === 'warehouse_manager') {
+        filteredRequests = allRequests.filter(
+          (req) => req.customerId === currentUser.id,
+        );
+      } else if (currentUser.role === "warehouse_manager") {
         // Warehouse manager cannot see service requests
-        return res.status(403).json({ message: "ليس لديك صلاحية لعرض طلبات الصيانة" });
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لعرض طلبات الصيانة" });
       }
 
       res.json(filteredRequests);
@@ -1180,18 +1382,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Log activity
       await storage.logActivity({
-        userId: serviceRequest.technicianId || '',
+        userId: serviceRequest.technicianId || "",
         action: "create",
         entityType: "service_request",
         entityId: serviceRequest.id,
-        description: `تم إضافة طلب صيانة جديد: ${serviceRequest.requestNumber}`
+        description: `تم إضافة طلب صيانة جديد: ${serviceRequest.requestNumber}`,
       });
 
       res.status(201).json(serviceRequest);
     } catch (error) {
       console.error("Create service request error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في إضافة طلب الصيانة" });
     }
@@ -1200,22 +1404,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/service-requests/:id", async (req, res) => {
     try {
       const requestData = insertServiceRequestSchema.partial().parse(req.body);
-      const serviceRequest = await storage.updateServiceRequest(req.params.id, requestData);
+      const serviceRequest = await storage.updateServiceRequest(
+        req.params.id,
+        requestData,
+      );
 
       // Log activity
       await storage.logActivity({
-        userId: serviceRequest.technicianId || '',
+        userId: serviceRequest.technicianId || "",
         action: "update",
         entityType: "service_request",
         entityId: serviceRequest.id,
-        description: `تم تحديث طلب الصيانة: ${serviceRequest.requestNumber}`
+        description: `تم تحديث طلب الصيانة: ${serviceRequest.requestNumber}`,
       });
 
       res.json(serviceRequest);
     } catch (error) {
       console.error("Update service request error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في تحديث طلب الصيانة" });
     }
@@ -1232,11 +1441,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Log activity
       await storage.logActivity({
-        userId: serviceRequest.technicianId || '',
+        userId: serviceRequest.technicianId || "",
         action: "delete",
         entityType: "service_request",
         entityId: req.params.id,
-        description: `تم حذف طلب الصيانة: ${serviceRequest.requestNumber}`
+        description: `تم حذف طلب الصيانة: ${serviceRequest.requestNumber}`,
       });
 
       res.json({ message: "تم حذف طلب الصيانة بنجاح" });
@@ -1255,39 +1464,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const stats = await storage.getDashboardStats();
-      
+
       // Filter stats based on user role
-      if (currentUser.role === 'technician') {
+      if (currentUser.role === "technician") {
         // For technicians, show only their assigned requests stats
         const allRequests = await storage.getAllServiceRequests();
-        const technicianRequests = allRequests.filter(req => req.technicianId === currentUser.id);
-        
+        const technicianRequests = allRequests.filter(
+          (req) => req.technicianId === currentUser.id,
+        );
+
         const filteredStats = {
           totalRequests: technicianRequests.length,
-          pendingRequests: technicianRequests.filter(req => req.status === 'pending').length,
-          inProgressRequests: technicianRequests.filter(req => req.status === 'in_progress').length,
-          completedRequests: technicianRequests.filter(req => req.status === 'completed').length,
+          pendingRequests: technicianRequests.filter(
+            (req) => req.status === "pending",
+          ).length,
+          inProgressRequests: technicianRequests.filter(
+            (req) => req.status === "in_progress",
+          ).length,
+          completedRequests: technicianRequests.filter(
+            (req) => req.status === "completed",
+          ).length,
           totalRevenue: technicianRequests
-            .filter(req => req.status === 'completed')
-            .reduce((sum, req) => sum + (req.actualCost || req.estimatedCost || 0), 0)
+            .filter((req) => req.status === "completed")
+            .reduce(
+              (sum, req) => sum + (req.actualCost || req.estimatedCost || 0),
+              0,
+            ),
         };
-        
+
         res.json(filteredStats);
-      } else if (currentUser.role === 'manager') {
+      } else if (currentUser.role === "manager") {
         const allRequests = await storage.getAllServiceRequests();
         const allUsers = await storage.getAllUsers();
         const allCustomers = await storage.getAllCustomers();
-        
-        const centerRequests = allRequests.filter(req => req.centerId === currentUser.centerId);
-        const centerUsers = allUsers.filter(user => user.centerId === currentUser.centerId);
-        
+
+        const centerRequests = allRequests.filter(
+          (req) => req.centerId === currentUser.centerId,
+        );
+        const centerUsers = allUsers.filter(
+          (user) => user.centerId === currentUser.centerId,
+        );
+
         const filteredStats = {
           totalUsers: centerUsers.length,
           serviceRequests: centerRequests.length,
           serviceCenters: 1, // Manager only sees their own center
-          revenue: centerRequests.reduce((sum, req) => sum + (req.estimatedCost || 0), 0)
+          revenue: centerRequests.reduce(
+            (sum, req) => sum + (req.estimatedCost || 0),
+            0,
+          ),
         };
-        
+
         res.json(filteredStats);
       } else {
         res.json(stats);
@@ -1306,19 +1533,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const recentRequests = await storage.getRecentServiceRequests();
-      
+
       // Filter recent requests based on user role
       let filteredRequests = recentRequests;
-      if (currentUser.role === 'manager') {
-        filteredRequests = recentRequests.filter(req => req.centerId === currentUser.centerId);
-      } else if (currentUser.role === 'technician') {
-        filteredRequests = recentRequests.filter(req => req.technicianId === currentUser.id);
-      } else if (currentUser.role === 'receptionist') {
-        filteredRequests = recentRequests.filter(req => req.centerId === currentUser.centerId);
-      } else if (currentUser.role === 'customer') {
-        filteredRequests = recentRequests.filter(req => req.customerId === currentUser.id);
+      if (currentUser.role === "manager") {
+        filteredRequests = recentRequests.filter(
+          (req) => req.centerId === currentUser.centerId,
+        );
+      } else if (currentUser.role === "technician") {
+        filteredRequests = recentRequests.filter(
+          (req) => req.technicianId === currentUser.id,
+        );
+      } else if (currentUser.role === "receptionist") {
+        filteredRequests = recentRequests.filter(
+          (req) => req.centerId === currentUser.centerId,
+        );
+      } else if (currentUser.role === "customer") {
+        filteredRequests = recentRequests.filter(
+          (req) => req.customerId === currentUser.id,
+        );
       }
-      
+
       res.json(filteredRequests);
     } catch (error) {
       console.error("Get recent requests error:", error);
@@ -1334,36 +1569,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const recentActivities = await storage.getRecentActivities();
-      
+
       // Filter activities based on user role
       let filteredActivities = recentActivities;
-      if (currentUser.role === 'manager') {
+      if (currentUser.role === "manager") {
         // For managers, show activities related to their center
         const allUsers = await storage.getAllUsers();
         const centerUserIds = allUsers
-          .filter(user => user.centerId === currentUser.centerId)
-          .map(user => user.id);
-        
-        filteredActivities = recentActivities.filter(activity => 
-          centerUserIds.includes(activity.userId)
+          .filter((user) => user.centerId === currentUser.centerId)
+          .map((user) => user.id);
+
+        filteredActivities = recentActivities.filter((activity) =>
+          centerUserIds.includes(activity.userId),
         );
-      } else if (currentUser.role === 'technician') {
+      } else if (currentUser.role === "technician") {
         // Technicians see only their own activities
-        filteredActivities = recentActivities.filter(activity => 
-          activity.userId === currentUser.id
+        filteredActivities = recentActivities.filter(
+          (activity) => activity.userId === currentUser.id,
         );
-      } else if (currentUser.role === 'receptionist') {
+      } else if (currentUser.role === "receptionist") {
         // Receptionists see activities from their center
         const allUsers = await storage.getAllUsers();
         const centerUserIds = allUsers
-          .filter(user => user.centerId === currentUser.centerId)
-          .map(user => user.id);
-        
-        filteredActivities = recentActivities.filter(activity => 
-          centerUserIds.includes(activity.userId)
+          .filter((user) => user.centerId === currentUser.centerId)
+          .map((user) => user.id);
+
+        filteredActivities = recentActivities.filter((activity) =>
+          centerUserIds.includes(activity.userId),
         );
       }
-      
+
       res.json(filteredActivities);
     } catch (error) {
       console.error("Get recent activities error:", error);
@@ -1391,8 +1626,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Only admin can export all data
-      if (currentUser.role !== 'admin') {
-        return res.status(403).json({ message: "ليس لديك صلاحية لتصدير البيانات" });
+      if (currentUser.role !== "admin") {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لتصدير البيانات" });
       }
 
       // Get all data
@@ -1405,7 +1642,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         warehouses: await storage.getAllWarehouses(),
         serviceRequests: await storage.getAllServiceRequests(),
         exportDate: new Date().toISOString(),
-        exportedBy: currentUser.fullName
+        exportedBy: currentUser.fullName,
       };
 
       // Log activity
@@ -1414,12 +1651,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "export",
         entityType: "system_data",
         entityId: null,
-        description: `تم تصدير البيانات بواسطة ${currentUser.fullName}`
+        description: `تم تصدير البيانات بواسطة ${currentUser.fullName}`,
       });
 
       // Set headers for file download
-      res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Content-Disposition', `attachment; filename="sokany-backup-${new Date().toISOString().split('T')[0]}.json"`);
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="sokany-backup-${new Date().toISOString().split("T")[0]}.json"`,
+      );
       res.json(data);
     } catch (error) {
       console.error("Export data error:", error);
@@ -1435,13 +1675,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Only admin can import data
-      if (currentUser.role !== 'admin') {
-        return res.status(403).json({ message: "ليس لديك صلاحية لاستيراد البيانات" });
+      if (currentUser.role !== "admin") {
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لاستيراد البيانات" });
       }
 
       const importData = req.body;
-      
-      if (!importData || typeof importData !== 'object') {
+
+      if (!importData || typeof importData !== "object") {
         return res.status(400).json({ message: "بيانات الاستيراد غير صحيحة" });
       }
 
@@ -1452,11 +1694,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         categories: 0,
         products: 0,
         warehouses: 0,
-        serviceRequests: 0
+        serviceRequests: 0,
       };
 
       // Import service centers first (as they are referenced by other entities)
-      if (importData.serviceCenters && Array.isArray(importData.serviceCenters)) {
+      if (
+        importData.serviceCenters &&
+        Array.isArray(importData.serviceCenters)
+      ) {
         for (const center of importData.serviceCenters) {
           try {
             await storage.createServiceCenter(center);
@@ -1532,7 +1777,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Import service requests
-      if (importData.serviceRequests && Array.isArray(importData.serviceRequests)) {
+      if (
+        importData.serviceRequests &&
+        Array.isArray(importData.serviceRequests)
+      ) {
         for (const request of importData.serviceRequests) {
           try {
             await storage.createServiceRequest(request);
@@ -1549,12 +1797,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "import",
         entityType: "system_data",
         entityId: null,
-        description: `تم استيراد البيانات بواسطة ${currentUser.fullName}`
+        description: `تم استيراد البيانات بواسطة ${currentUser.fullName}`,
       });
 
-      res.json({ 
+      res.json({
         message: "تم استيراد البيانات بنجاح",
-        imported: importedCount
+        imported: importedCount,
       });
     } catch (error) {
       console.error("Import data error:", error);
