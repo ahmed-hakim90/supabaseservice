@@ -207,7 +207,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
       }
 
-      const allUsers = await storage.getAllUsers();
+      let allUsers;
+      try {
+        allUsers = await storage.getAllUsers();
+      } catch (dbError) {
+        console.error("Database connection error while fetching users:", dbError);
+        // Return empty array when database is not available
+        return res.json([]);
+      }
+
       let filteredUsers = allUsers;
 
       // Filter users based on role
@@ -243,8 +251,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userData = insertUserSchema.parse(req.body);
       
-      // Check if user already exists
-      const existingUser = await storage.getUserByEmail(userData.email);
+      // Check if user already exists (with database fallback)
+      let existingUser;
+      try {
+        existingUser = await storage.getUserByEmail(userData.email);
+      } catch (dbError) {
+        console.error("Database connection error during user check:", dbError);
+        // Return a temporary response when database is not available
+        return res.status(503).json({ 
+          message: "قاعدة البيانات غير متاحة حالياً. يرجى المحاولة مرة أخرى لاحقاً." 
+        });
+      }
+      
       if (existingUser) {
         return res.status(400).json({ message: "المستخدم موجود بالفعل" });
       }
@@ -252,19 +270,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Hash password before storing
       const hashedPassword = await bcrypt.hash(userData.password, 10);
       
-      const user = await storage.createUser({
-        ...userData,
-        password: hashedPassword
-      });
+      let user;
+      try {
+        user = await storage.createUser({
+          ...userData,
+          password: hashedPassword
+        });
+      } catch (dbError) {
+        console.error("Database connection error during user creation:", dbError);
+        return res.status(503).json({ 
+          message: "قاعدة البيانات غير متاحة حالياً. يرجى المحاولة مرة أخرى لاحقاً." 
+        });
+      }
 
-      // Log activity
-      await storage.logActivity({
-        userId: user.id,
-        action: "create",
-        entityType: "user",
-        entityId: user.id,
-        description: `تم إضافة مستخدم جديد: ${user.fullName}`
-      });
+      // Try to log activity (but don't fail if logging fails)
+      try {
+        await storage.logActivity({
+          userId: user.id,
+          action: "create",
+          entityType: "user",
+          entityId: user.id,
+          description: `تم إضافة مستخدم جديد: ${user.fullName}`
+        });
+      } catch (logError) {
+        console.warn("Could not log activity:", logError);
+      }
 
       res.status(201).json(user);
     } catch (error) {
