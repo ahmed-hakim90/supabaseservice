@@ -1,0 +1,1544 @@
+<html lang="ar" dir="rtl" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة مراكز صيانة سوكاني</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                borderRadius: {
+                    lg: "var(--radius)",
+                    md: "calc(var(--radius) - 2px)",
+                    sm: "calc(var(--radius) - 4px)",
+                },
+                colors: {
+                    background: "var(--background)",
+                    foreground: "var(--foreground)",
+                    card: {
+                        DEFAULT: "var(--card)",
+                        foreground: "var(--card-foreground)",
+                    },
+                    popover: {
+                        DEFAULT: "var(--popover)",
+                        foreground: "var(--popover-foreground)",
+                    },
+                    primary: {
+                        DEFAULT: "var(--primary)",
+                        foreground: "var(--primary-foreground)",
+                    },
+                    secondary: {
+                        DEFAULT: "var(--secondary)",
+                        foreground: "var(--secondary-foreground)",
+                    },
+                    muted: {
+                        DEFAULT: "var(--muted)",
+                        foreground: "var(--muted-foreground)",
+                    },
+                    accent: {
+                        DEFAULT: "var(--accent)",
+                        foreground: "var(--accent-foreground)",
+                    },
+                    destructive: {
+                        DEFAULT: "var(--destructive)",
+                        foreground: "var(--destructive-foreground)",
+                    },
+                    border: "var(--border)",
+                    input: "var(--input)",
+                    ring: "var(--ring)",
+                    chart: {
+                        "1": "var(--chart-1)",
+                        "2": "var(--chart-2)",
+                        "3": "var(--chart-3)",
+                        "4": "var(--chart-4)",
+                        "5": "var(--chart-5)",
+                    }
+                },
+                fontFamily: {
+                    sans: ["var(--font-sans)"],
+                    serif: ["var(--font-serif)"],
+                    mono: ["var(--font-mono)"],
+                }
+            },
+        }
+    };
+    </script>
+    <style>
+    :root {
+        --card: #fcfcfc;
+        --ring: hsl(0, 0%, 41.96%);
+        --input: #b5b5b5;
+        --muted: #e3e3e3;
+        --accent: hsl(0, 0%, 100%);
+        --border: #e8e8e8;
+        --radius: 0.8rem;
+        --shadow: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00), 0px 1px 2px -1px hsl(9, 75%, 61% / 0.00);
+        --chart-1: hsl(203.8863, 88.2845%, 53.1373%);
+        --chart-2: hsl(159.7826, 100%, 36.0784%);
+        --chart-3: hsl(42.0290, 92.8251%, 56.2745%);
+        --chart-4: hsl(147.1429, 78.5047%, 41.9608%);
+        --chart-5: hsl(341.4894, 75.2000%, 50.9804%);
+        --popover: hsl(45, 25%, 97%);
+        --primary: #eb1a4e;
+        --sidebar: hsl(45, 25%, 97%);
+        --spacing: 0.25rem;
+        --font-mono: Menlo, monospace;
+        --font-sans: 'Poppins', sans-serif;
+        --secondary: #c4c4c4;
+        --shadow-lg: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00), 0px 4px 6px -1px hsl(9, 75%, 61% / 0.00);
+        --shadow-md: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00), 0px 2px 4px -1px hsl(9, 75%, 61% / 0.00);
+        --shadow-sm: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00), 0px 1px 2px -1px hsl(9, 75%, 61% / 0.00);
+        --shadow-xl: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00), 0px 8px 10px -1px hsl(9, 75%, 61% / 0.00);
+        --shadow-xs: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00);
+        --background: #f0f0f0;
+        --font-serif: 'Poppins', sans-serif;
+        --foreground: #1a1a1a;
+        --shadow-2xl: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00);
+        --shadow-2xs: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00);
+        --destructive: hsl(0, 0%, 0%);
+        --sidebar-ring: hsl(9, 75%, 61%);
+        --sidebar-accent: hsl(25, 45%, 80%);
+        --sidebar-border: hsl(45, 15%, 80%);
+        --card-foreground: hsl(0, 0%, 0%);
+        --sidebar-primary: hsl(9, 75%, 61%);
+        --tracking-normal: 0em;
+        --muted-foreground: #212121;
+        --accent-foreground: hsl(0, 0%, 10.2%);
+        --popover-foreground: hsl(0, 0%, 100%);
+        --primary-foreground: #ffffff;
+        --sidebar-foreground: hsl(20, 14%, 17%);
+        --secondary-foreground: #1a1a1a;
+        --destructive-foreground: #ffffff;
+        --sidebar-accent-foreground: hsl(20, 14%, 17%);
+        --sidebar-primary-foreground: hsl(0, 0%, 100%);
+    }
+
+    .dark {
+        --card: hsl(20, 14%, 8%);
+        --ring: hsl(9, 75%, 61%);
+        --input: hsl(20, 14%, 18%);
+        --muted: hsl(20, 14%, 15%);
+        --accent: hsl(25, 45%, 20%);
+        --border: hsl(20, 14%, 15%);
+        --chart-1: hsl(203.8863, 88.2845%, 53.1373%);
+        --chart-2: hsl(159.7826, 100%, 36.0784%);
+        --chart-3: hsl(42.0290, 92.8251%, 56.2745%);
+        --chart-4: hsl(147.1429, 78.5047%, 41.9608%);
+        --chart-5: hsl(341.4894, 75.2000%, 50.9804%);
+        --popover: hsl(20, 14%, 4%);
+        --primary: hsl(9, 75%, 61%);
+        --sidebar: hsl(20, 14%, 8%);
+        --secondary: hsl(30, 15%, 52%);
+        --background: hsl(20, 14%, 4%);
+        --foreground: hsl(45, 25%, 91%);
+        --destructive: hsl(356.3033, 90.5579%, 54.3137%);
+        --sidebar-ring: hsl(9, 75%, 61%);
+        --sidebar-accent: hsl(25, 45%, 20%);
+        --sidebar-border: hsl(20, 14%, 15%);
+        --card-foreground: hsl(45, 25%, 85%);
+        --sidebar-primary: hsl(9, 75%, 61%);
+        --muted-foreground: hsl(45, 15%, 46%);
+        --accent-foreground: hsl(45, 25%, 85%);
+        --popover-foreground: hsl(45, 25%, 91%);
+        --primary-foreground: hsl(0, 0%, 100%);
+        --sidebar-foreground: hsl(45, 25%, 85%);
+        --secondary-foreground: hsl(0, 0%, 100%);
+        --destructive-foreground: hsl(0, 0%, 100%);
+        --sidebar-accent-foreground: hsl(45, 25%, 85%);
+        --sidebar-primary-foreground: hsl(0, 0%, 100%);
+    }
+
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+    
+    * {
+        font-family: 'Poppins', sans-serif;
+    }
+    
+    .page-content {
+        display: none;
+    }
+    
+    .page-content.active {
+        display: block;
+    }
+    
+    .sidebar-link.active {
+        background-color: hsl(var(--primary) / 0.1);
+        border-left: 3px solid hsl(var(--primary));
+        color: hsl(var(--primary));
+    }
+    
+    .notification-badge {
+        position: absolute;
+        top: -8px;
+        left: -8px;
+        background-color: hsl(var(--destructive));
+        color: hsl(var(--destructive-foreground));
+        border-radius: 50%;
+        width: 18px;
+        height: 18px;
+        font-size: 11px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-weight: 600;
+    }
+    
+    .status-badge {
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .status-pending {
+        background-color: hsl(43, 96%, 56% / 0.1);
+        color: hsl(43, 96%, 45%);
+        border: 1px solid hsl(43, 96%, 56% / 0.2);
+    }
+    
+    .status-in-progress {
+        background-color: hsl(var(--chart-1) / 0.1);
+        color: hsl(var(--chart-1));
+        border: 1px solid hsl(var(--chart-1) / 0.2);
+    }
+    
+    .status-completed {
+        background-color: hsl(var(--chart-2) / 0.1);
+        color: hsl(var(--chart-2));
+        border: 1px solid hsl(var(--chart-2) / 0.2);
+    }
+    
+    .status-cancelled {
+        background-color: hsl(var(--destructive) / 0.1);
+        color: hsl(var(--destructive));
+        border: 1px solid hsl(var(--destructive) / 0.2);
+    }
+    
+    .glass-effect {
+        backdrop-filter: blur(10px);
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .hover-scale {
+        transition: transform 0.2s ease-in-out;
+    }
+    
+    .hover-scale:hover {
+        transform: scale(1.02);
+    }
+    
+    .loading-spinner {
+        border: 2px solid hsl(var(--muted));
+        border-top: 2px solid hsl(var(--primary));
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    @media (max-width: 768px) {
+        .sidebar {
+            transform: translateX(100%);
+            transition: transform 0.3s ease-in-out;
+        }
+        
+        .sidebar.open {
+            transform: translateX(0);
+        }
+        
+        .main-content {
+            margin-right: 0;
+        }
+    }
+    </style>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+</head>
+<body class="bg-background text-foreground">
+    <!-- @COMPONENT: LoginPage -->
+    <div id="login-page" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10">
+        <div class="w-full max-w-md p-8 bg-card rounded-lg shadow-xl border border-border">
+            <div class="text-center mb-8">
+                <!-- Company logo placeholder -->
+                <div class="w-24 h-12 mx-auto mb-4 bg-primary rounded-lg flex items-center justify-center">
+                    <span class="text-primary-foreground font-bold text-lg">Sokany</span>
+                </div>
+                <h1 class="text-2xl font-bold text-card-foreground mb-2">تسجيل الدخول</h1>
+                <p class="text-muted-foreground">مرحباً بك في نظام إدارة مراكز الصيانة</p>
+            </div>
+            
+            <form id="login-form" class="space-y-6">
+                <div class="space-y-2">
+                    <label for="email" class="block text-sm font-medium text-card-foreground">البريد الإلكتروني</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        data-bind="auth.email"
+                        class="w-full px-4 py-3 border border-input rounded-lg bg-background text-foreground placeholder-muted-foreground focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        placeholder="admin@sokany.com"
+                        required
+                    >
+                </div>
+                
+                <div class="space-y-2">
+                    <label for="password" class="block text-sm font-medium text-card-foreground">كلمة المرور</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        data-bind="auth.password"
+                        class="w-full px-4 py-3 border border-input rounded-lg bg-background text-foreground placeholder-muted-foreground focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        placeholder="••••••••"
+                        required
+                    >
+                </div>
+                
+                <div class="flex items-center justify-between">
+                    <label class="flex items-center">
+                        <input type="checkbox" class="rounded border-input text-primary focus:ring-primary">
+                        <span class="mr-2 text-sm text-muted-foreground">تذكرني</span>
+                    </label>
+                    <a href="#" class="text-sm text-primary hover:underline">نسيت كلمة المرور؟</a>
+                </div>
+                
+                <button 
+                    type="submit" 
+                    data-event="click:handleLogin"
+                    class="w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <span id="login-text">تسجيل الدخول</span>
+                    <div id="login-spinner" class="loading-spinner mx-auto hidden"></div>
+                </button>
+            </form>
+            
+            <p class="mt-6 text-center text-sm text-muted-foreground">
+                ليس لديك حساب؟ 
+                <a href="#" id="show-signup" class="text-primary hover:underline font-medium">إنشاء حساب جديد</a>
+            </p>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: LoginPage -->
+
+    <!-- @COMPONENT: SignupPage -->
+    <div id="signup-page" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10 hidden">
+        <div class="w-full max-w-md p-8 bg-card rounded-lg shadow-xl border border-border">
+            <div class="text-center mb-8">
+                <div class="w-24 h-12 mx-auto mb-4 bg-primary rounded-lg flex items-center justify-center">
+                    <span class="text-primary-foreground font-bold text-lg">Sokany</span>
+                </div>
+                <h1 class="text-2xl font-bold text-card-foreground mb-2">إنشاء حساب جديد</h1>
+                <p class="text-muted-foreground">انضم إلى شبكة مراكز الصيانة المعتمدة</p>
+            </div>
+            
+            <form id="signup-form" class="space-y-4">
+                <div class="space-y-2">
+                    <label for="signup-name" class="block text-sm font-medium text-card-foreground">الاسم بالكامل</label>
+                    <input 
+                        type="text" 
+                        id="signup-name" 
+                        data-bind="user.fullName"
+                        class="w-full px-4 py-3 border border-input rounded-lg bg-background text-foreground placeholder-muted-foreground focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        placeholder="أدخل اسمك الكامل"
+                        required
+                    >
+                </div>
+                
+                <div class="space-y-2">
+                    <label for="signup-phone" class="block text-sm font-medium text-card-foreground">رقم الهاتف</label>
+                    <input 
+                        type="tel" 
+                        id="signup-phone" 
+                        data-bind="user.phone"
+                        class="w-full px-4 py-3 border border-input rounded-lg bg-background text-foreground placeholder-muted-foreground focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        placeholder="01xxxxxxxxx"
+                        required
+                    >
+                </div>
+                
+                <div class="space-y-2">
+                    <label for="signup-address" class="block text-sm font-medium text-card-foreground">العنوان</label>
+                    <textarea 
+                        id="signup-address" 
+                        data-bind="user.address"
+                        rows="2"
+                        class="w-full px-4 py-3 border border-input rounded-lg bg-background text-foreground placeholder-muted-foreground focus:ring-2 focus:ring-primary focus:border-transparent transition-all resize-none"
+                        placeholder="أدخل عنوانك بالتفصيل"
+                    ></textarea>
+                </div>
+                
+                <div class="space-y-2">
+                    <label for="signup-email" class="block text-sm font-medium text-card-foreground">البريد الإلكتروني</label>
+                    <input 
+                        type="email" 
+                        id="signup-email" 
+                        data-bind="user.email"
+                        class="w-full px-4 py-3 border border-input rounded-lg bg-background text-foreground placeholder-muted-foreground focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        placeholder="example@email.com"
+                        required
+                    >
+                </div>
+                
+                <div class="space-y-2">
+                    <label for="signup-password" class="block text-sm font-medium text-card-foreground">كلمة المرور</label>
+                    <input 
+                        type="password" 
+                        id="signup-password" 
+                        data-bind="user.password"
+                        class="w-full px-4 py-3 border border-input rounded-lg bg-background text-foreground placeholder-muted-foreground focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        placeholder="••••••••"
+                        required
+                    >
+                </div>
+                
+                <button 
+                    type="submit" 
+                    data-event="click:handleSignup"
+                    class="w-full py-3 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    إنشاء حساب
+                </button>
+            </form>
+            
+            <p class="mt-6 text-center text-sm text-muted-foreground">
+                لديك حساب بالفعل؟ 
+                <a href="#" id="show-login" class="text-primary hover:underline font-medium">تسجيل الدخول</a>
+            </p>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: SignupPage -->
+
+    <!-- @COMPONENT: WaitingPage -->
+    <div id="waiting-page" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 to-secondary/10 hidden">
+        <div class="w-full max-w-md p-8 bg-card rounded-lg shadow-xl border border-border text-center">
+            <div class="w-24 h-12 mx-auto mb-6 bg-primary rounded-lg flex items-center justify-center">
+                <span class="text-primary-foreground font-bold text-lg">Sokany</span>
+            </div>
+            
+            <div class="w-16 h-16 mx-auto mb-6 bg-primary/10 rounded-full flex items-center justify-center">
+                <i class="bi bi-clock text-2xl text-primary"></i>
+            </div>
+            
+            <h1 class="text-2xl font-bold text-card-foreground mb-4">في انتظار الموافقة</h1>
+            
+            <div class="p-4 bg-accent rounded-lg border border-border mb-6">
+                <i class="bi bi-info-circle text-primary text-lg mb-2"></i>
+                <p class="text-accent-foreground text-sm">
+                    سوف يتم التواصل معك في أقرب وقت
+                </p>
+            </div>
+            
+            <p class="text-muted-foreground mb-6">
+                تم استلام طلب إنشاء حسابك بنجاح وسيتم مراجعته من قبل المسؤول
+            </p>
+            
+            <button 
+                id="back-to-login" 
+                data-event="click:showLogin"
+                class="w-full py-3 bg-secondary text-secondary-foreground rounded-lg font-medium hover:bg-secondary/90 transition-all"
+            >
+                العودة إلى تسجيل الدخول
+            </button>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: WaitingPage -->
+
+    <!-- @COMPONENT: Dashboard -->
+    <div id="dashboard" class="hidden">
+        <!-- @COMPONENT: TopNavbar -->
+        <nav class="bg-card border-b border-border sticky top-0 z-40">
+            <div class="px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex items-center">
+                        <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-md text-foreground hover:bg-accent">
+                            <i class="bi bi-list text-xl"></i>
+                        </button>
+                        <div class="flex-shrink-0 flex items-center mr-4">
+                            <div class="w-8 h-8 bg-primary rounded flex items-center justify-center">
+                                <span class="text-primary-foreground font-bold text-sm">S</span>
+                            </div>
+                            <span class="mr-2 text-xl font-bold text-foreground">Sokany</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-4 space-x-reverse">
+                        <!-- Theme Toggle -->
+                        <button id="theme-toggle" class="p-2 rounded-md text-foreground hover:bg-accent transition-colors">
+                            <i class="bi bi-moon text-lg"></i>
+                        </button>
+                        
+                        <!-- Notifications -->
+                        <div class="relative">
+                            <button id="notifications-btn" class="p-2 rounded-md text-foreground hover:bg-accent transition-colors">
+                                <i class="bi bi-bell text-lg"></i>
+                                <span class="notification-badge" data-mock="true">3</span>
+                            </button>
+                        </div>
+                        
+                        <!-- User Dropdown -->
+                        <div class="relative">
+                            <button id="user-menu-btn" class="flex items-center space-x-3 space-x-reverse p-2 rounded-md text-foreground hover:bg-accent transition-colors">
+                                <div class="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                                    <i class="bi bi-person text-primary-foreground"></i>
+                                </div>
+                                <span class="hidden md:block font-medium" data-bind="user.name" data-mock="true">محمد أحمد</span>
+                                <i class="bi bi-chevron-down text-sm"></i>
+                            </button>
+                            
+                            <div id="user-dropdown" class="hidden absolute left-0 mt-2 w-48 bg-popover rounded-lg shadow-lg border border-border py-1 z-50">
+                                <a href="#" class="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-accent">
+                                    <i class="bi bi-person w-4 h-4 ml-2"></i>
+                                    الملف الشخصي
+                                </a>
+                                <a href="#" class="flex items-center px-4 py-2 text-sm text-popover-foreground hover:bg-accent">
+                                    <i class="bi bi-gear w-4 h-4 ml-2"></i>
+                                    الإعدادات
+                                </a>
+                                <hr class="my-1 border-border">
+                                <a href="#" id="logout" data-event="click:handleLogout" class="flex items-center px-4 py-2 text-sm text-destructive hover:bg-accent">
+                                    <i class="bi bi-box-arrow-left w-4 h-4 ml-2"></i>
+                                    تسجيل الخروج
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+        <!-- @END_COMPONENT: TopNavbar -->
+
+        <div class="flex">
+            <!-- @COMPONENT: Sidebar -->
+            <div class="sidebar fixed right-0 top-16 h-[calc(100vh-4rem)] w-64 bg-card border-l border-border overflow-y-auto transition-transform duration-300 ease-in-out lg:translate-x-0 z-30">
+                <div class="p-4">
+                    <nav class="space-y-2">
+                        <a href="#" class="sidebar-link active flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors" data-page="dashboard-page">
+                            <i class="bi bi-speedometer2 w-5 h-5 ml-3"></i>
+                            <span>لوحة التحكم</span>
+                        </a>
+                        
+                        <a href="#" class="sidebar-link flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors hover:bg-accent" data-page="users-page">
+                            <i class="bi bi-people w-5 h-5 ml-3"></i>
+                            <span>المستخدمين</span>
+                        </a>
+                        
+                        <a href="#" class="sidebar-link flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors hover:bg-accent" data-page="roles-page">
+                            <i class="bi bi-shield-check w-5 h-5 ml-3"></i>
+                            <span>الأدوار والصلاحيات</span>
+                        </a>
+                        
+                        <a href="#" class="sidebar-link flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors hover:bg-accent" data-page="centers-page">
+                            <i class="bi bi-building w-5 h-5 ml-3"></i>
+                            <span>مراكز الخدمة</span>
+                        </a>
+                        
+                        <a href="#" class="sidebar-link flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors hover:bg-accent" data-page="warehouses-page">
+                            <i class="bi bi-shop w-5 h-5 ml-3"></i>
+                            <span>المخازن</span>
+                        </a>
+                        
+                        <a href="#" class="sidebar-link flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors hover:bg-accent" data-page="customers-page">
+                            <i class="bi bi-person-badge w-5 h-5 ml-3"></i>
+                            <span>العملاء</span>
+                        </a>
+                        
+                        <a href="#" class="sidebar-link flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors hover:bg-accent" data-page="categories-page">
+                            <i class="bi bi-diagram-3 w-5 h-5 ml-3"></i>
+                            <span>الفئات والمنتجات</span>
+                        </a>
+                        
+                        <a href="#" class="sidebar-link flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors hover:bg-accent" data-page="service-requests-page">
+                            <i class="bi bi-tools w-5 h-5 ml-3"></i>
+                            <span>طلبات الصيانة</span>
+                        </a>
+                        
+                        <a href="#" class="sidebar-link flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors hover:bg-accent" data-page="transfers-page">
+                            <i class="bi bi-arrow-left-right w-5 h-5 ml-3"></i>
+                            <span>تحويل قطع الغيار</span>
+                        </a>
+                        
+                        <a href="#" class="sidebar-link flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors hover:bg-accent" data-page="reports-page">
+                            <i class="bi bi-graph-up w-5 h-5 ml-3"></i>
+                            <span>التقارير</span>
+                        </a>
+                        
+                        <a href="#" class="sidebar-link flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors hover:bg-accent" data-page="activities-page">
+                            <i class="bi bi-activity w-5 h-5 ml-3"></i>
+                            <span>سجل الأنشطة</span>
+                        </a>
+                        
+                        <a href="#" class="sidebar-link flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors hover:bg-accent" data-page="settings-page">
+                            <i class="bi bi-gear w-5 h-5 ml-3"></i>
+                            <span>الإعدادات</span>
+                        </a>
+                    </nav>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: Sidebar -->
+
+            <!-- @COMPONENT: MainContent -->
+            <div class="main-content flex-1 lg:mr-64 p-6 min-h-[calc(100vh-4rem)]">
+                
+                <!-- @COMPONENT: DashboardPage -->
+                <div id="dashboard-page" class="page-content active">
+                    <div class="mb-8">
+                        <h1 class="text-3xl font-bold text-foreground mb-2">لوحة التحكم</h1>
+                        <p class="text-muted-foreground">نظرة عامة على أداء النظام</p>
+                    </div>
+                    
+                    <!-- Stats Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <!-- @MAP: stats.map(stat => ( -->
+                        <div class="bg-card rounded-lg border border-border p-6 hover-scale">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-muted-foreground" data-mock="true">إجمالي المستخدمين</p>
+                                    <p class="text-2xl font-bold text-card-foreground" data-bind="stats.totalUsers" data-mock="true">156</p>
+                                    <p class="text-xs text-chart-2 mt-1" data-mock="true">+12% من الشهر الماضي</p>
+                                </div>
+                                <div class="w-12 h-12 bg-chart-1/10 rounded-lg flex items-center justify-center">
+                                    <i class="bi bi-people text-xl text-chart-1"></i>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-card rounded-lg border border-border p-6 hover-scale">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-muted-foreground" data-mock="true">طلبات الصيانة</p>
+                                    <p class="text-2xl font-bold text-card-foreground" data-bind="stats.serviceRequests" data-mock="true">89</p>
+                                    <p class="text-xs text-chart-3 mt-1" data-mock="true">+5% من الشهر الماضي</p>
+                                </div>
+                                <div class="w-12 h-12 bg-chart-2/10 rounded-lg flex items-center justify-center">
+                                    <i class="bi bi-tools text-xl text-chart-2"></i>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-card rounded-lg border border-border p-6 hover-scale">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-muted-foreground" data-mock="true">مراكز الخدمة</p>
+                                    <p class="text-2xl font-bold text-card-foreground" data-bind="stats.serviceCenters" data-mock="true">24</p>
+                                    <p class="text-xs text-chart-4 mt-1" data-mock="true">+2 مراكز جديدة</p>
+                                </div>
+                                <div class="w-12 h-12 bg-chart-3/10 rounded-lg flex items-center justify-center">
+                                    <i class="bi bi-building text-xl text-chart-3"></i>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-card rounded-lg border border-border p-6 hover-scale">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-muted-foreground" data-mock="true">الإيرادات</p>
+                                    <p class="text-2xl font-bold text-card-foreground" data-bind="stats.revenue" data-mock="true">125,490 ج.م</p>
+                                    <p class="text-xs text-chart-5 mt-1" data-mock="true">+18% من الشهر الماضي</p>
+                                </div>
+                                <div class="w-12 h-12 bg-chart-4/10 rounded-lg flex items-center justify-center">
+                                    <i class="bi bi-currency-dollar text-xl text-chart-4"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- @END_MAP )) -->
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                        <!-- Recent Service Requests -->
+                        <div class="bg-card rounded-lg border border-border">
+                            <div class="p-6 border-b border-border">
+                                <h3 class="text-lg font-semibold text-card-foreground">أحدث طلبات الصيانة</h3>
+                            </div>
+                            <div class="p-6">
+                                <div class="space-y-4">
+                                    <!-- @MAP: recentRequests.map(request => ( -->
+                                    <div class="flex items-center justify-between p-4 bg-muted rounded-lg" data-mock="true">
+                                        <div class="flex items-center space-x-4 space-x-reverse">
+                                            <div class="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                                                <i class="bi bi-tools text-primary"></i>
+                                            </div>
+                                            <div>
+                                                <p class="font-medium text-card-foreground" data-bind="request.deviceName">غسالة سوكاني 7 كيلو</p>
+                                                <p class="text-sm text-muted-foreground" data-bind="request.customerName">أحمد محمد</p>
+                                            </div>
+                                        </div>
+                                        <span class="status-badge status-pending" data-bind="request.status">في الانتظار</span>
+                                    </div>
+                                    
+                                    <div class="flex items-center justify-between p-4 bg-muted rounded-lg" data-mock="true">
+                                        <div class="flex items-center space-x-4 space-x-reverse">
+                                            <div class="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                                                <i class="bi bi-tools text-primary"></i>
+                                            </div>
+                                            <div>
+                                                <p class="font-medium text-card-foreground">مكواة بخار</p>
+                                                <p class="text-sm text-muted-foreground">سارة أحمد</p>
+                                            </div>
+                                        </div>
+                                        <span class="status-badge status-in-progress">قيد التنفيذ</span>
+                                    </div>
+                                    
+                                    <div class="flex items-center justify-between p-4 bg-muted rounded-lg" data-mock="true">
+                                        <div class="flex items-center space-x-4 space-x-reverse">
+                                            <div class="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                                                <i class="bi bi-tools text-primary"></i>
+                                            </div>
+                                            <div>
+                                                <p class="font-medium text-card-foreground">خلاط كهربائي</p>
+                                                <p class="text-sm text-muted-foreground">محمود علي</p>
+                                            </div>
+                                        </div>
+                                        <span class="status-badge status-completed">مكتمل</span>
+                                    </div>
+                                    <!-- @END_MAP )) -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Recent Activities -->
+                        <div class="bg-card rounded-lg border border-border">
+                            <div class="p-6 border-b border-border">
+                                <h3 class="text-lg font-semibold text-card-foreground">آخر الأنشطة</h3>
+                            </div>
+                            <div class="p-6">
+                                <div class="space-y-4">
+                                    <!-- @MAP: recentActivities.map(activity => ( -->
+                                    <div class="flex items-start space-x-4 space-x-reverse" data-mock="true">
+                                        <div class="w-2 h-2 bg-primary rounded-full mt-2"></div>
+                                        <div class="flex-1">
+                                            <p class="text-sm text-card-foreground" data-bind="activity.description">تم إضافة مستخدم جديد: أحمد محمد</p>
+                                            <p class="text-xs text-muted-foreground mt-1" data-bind="activity.timestamp">منذ 5 دقائق</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="flex items-start space-x-4 space-x-reverse" data-mock="true">
+                                        <div class="w-2 h-2 bg-chart-2 rounded-full mt-2"></div>
+                                        <div class="flex-1">
+                                            <p class="text-sm text-card-foreground">تم إنجاز طلب صيانة #12345</p>
+                                            <p class="text-xs text-muted-foreground mt-1">منذ 15 دقيقة</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="flex items-start space-x-4 space-x-reverse" data-mock="true">
+                                        <div class="w-2 h-2 bg-chart-3 rounded-full mt-2"></div>
+                                        <div class="flex-1">
+                                            <p class="text-sm text-card-foreground">تم تحديث مركز خدمة: القاهرة الجديدة</p>
+                                            <p class="text-xs text-muted-foreground mt-1">منذ 30 دقيقة</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="flex items-start space-x-4 space-x-reverse" data-mock="true">
+                                        <div class="w-2 h-2 bg-chart-4 rounded-full mt-2"></div>
+                                        <div class="flex-1">
+                                            <p class="text-sm text-card-foreground">تم إضافة قطع غيار جديدة للمخزن</p>
+                                            <p class="text-xs text-muted-foreground mt-1">منذ ساعة</p>
+                                        </div>
+                                    </div>
+                                    <!-- @END_MAP )) -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- @END_COMPONENT: DashboardPage -->
+
+                <!-- @COMPONENT: UsersPage -->
+                <div id="users-page" class="page-content">
+                    <div class="mb-8 flex items-center justify-between">
+                        <div>
+                            <h1 class="text-3xl font-bold text-foreground mb-2">إدارة المستخدمين</h1>
+                            <p class="text-muted-foreground">إدارة حسابات المستخدمين وصلاحياتهم</p>
+                        </div>
+                        <button 
+                            id="add-user-btn" 
+                            data-event="click:showAddUserModal"
+                            class="bg-primary text-primary-foreground px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center space-x-2 space-x-reverse"
+                        >
+                            <i class="bi bi-plus-circle"></i>
+                            <span>إضافة مستخدم</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Search and Filters -->
+                    <div class="bg-card rounded-lg border border-border p-6 mb-6">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-card-foreground mb-2">البحث</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="البحث بالاسم أو البريد الإلكتروني..."
+                                    class="w-full px-4 py-2 border border-input rounded-lg bg-background text-foreground placeholder-muted-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
+                                >
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-card-foreground mb-2">الدور</label>
+                                <select class="w-full px-4 py-2 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    <option value="">جميع الأدوار</option>
+                                    <option value="admin">مدير</option>
+                                    <option value="manager">مدير مركز</option>
+                                    <option value="technician">فني</option>
+                                    <option value="customer">عميل</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-card-foreground mb-2">الحالة</label>
+                                <select class="w-full px-4 py-2 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    <option value="">جميع الحالات</option>
+                                    <option value="active">نشط</option>
+                                    <option value="inactive">غير نشط</option>
+                                    <option value="pending">في الانتظار</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Users Table -->
+                    <div class="bg-card rounded-lg border border-border overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-muted">
+                                    <tr>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">الاسم</th>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">البريد الإلكتروني</th>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">رقم الهاتف</th>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">الدور</th>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">الحالة</th>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">تاريخ التسجيل</th>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">الإجراءات</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border">
+                                    <!-- @MAP: users.map(user => ( -->
+                                    <tr class="hover:bg-muted/50" data-mock="true">
+                                        <td class="py-4 px-4">
+                                            <div class="flex items-center space-x-3 space-x-reverse">
+                                                <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                                                    <span class="text-sm font-medium text-primary" data-bind="user.initials">أح</span>
+                                                </div>
+                                                <span class="font-medium text-card-foreground" data-bind="user.fullName">أحمد محمد علي</span>
+                                            </div>
+                                        </td>
+                                        <td class="py-4 px-4 text-card-foreground" data-bind="user.email">ahmed@example.com</td>
+                                        <td class="py-4 px-4 text-card-foreground" data-bind="user.phone">01234567890</td>
+                                        <td class="py-4 px-4">
+                                            <span class="bg-chart-1/10 text-chart-1 px-2 py-1 rounded-full text-xs font-medium" data-bind="user.role">مدير مركز</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="status-badge status-completed" data-bind="user.status">نشط</span>
+                                        </td>
+                                        <td class="py-4 px-4 text-muted-foreground text-sm" data-bind="user.createdAt">2024/01/15</td>
+                                        <td class="py-4 px-4">
+                                            <div class="flex items-center space-x-2 space-x-reverse">
+                                                <button 
+                                                    data-event="click:editUser"
+                                                    class="p-2 text-chart-1 hover:bg-chart-1/10 rounded transition-colors"
+                                                    title="تعديل"
+                                                >
+                                                    <i class="bi bi-pencil text-sm"></i>
+                                                </button>
+                                                <button 
+                                                    data-event="click:deleteUser"
+                                                    class="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors"
+                                                    title="حذف"
+                                                >
+                                                    <i class="bi bi-trash text-sm"></i>
+                                                </button>
+                                                <button 
+                                                    data-event="click:viewUser"
+                                                    class="p-2 text-muted-foreground hover:bg-muted rounded transition-colors"
+                                                    title="عرض"
+                                                >
+                                                    <i class="bi bi-eye text-sm"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    
+                                    <tr class="hover:bg-muted/50" data-mock="true">
+                                        <td class="py-4 px-4">
+                                            <div class="flex items-center space-x-3 space-x-reverse">
+                                                <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                                                    <span class="text-sm font-medium text-primary">سا</span>
+                                                </div>
+                                                <span class="font-medium text-card-foreground">سارة أحمد محمد</span>
+                                            </div>
+                                        </td>
+                                        <td class="py-4 px-4 text-card-foreground">sara@example.com</td>
+                                        <td class="py-4 px-4 text-card-foreground">01123456789</td>
+                                        <td class="py-4 px-4">
+                                            <span class="bg-chart-2/10 text-chart-2 px-2 py-1 rounded-full text-xs font-medium">فني</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="status-badge status-completed">نشط</span>
+                                        </td>
+                                        <td class="py-4 px-4 text-muted-foreground text-sm">2024/01/10</td>
+                                        <td class="py-4 px-4">
+                                            <div class="flex items-center space-x-2 space-x-reverse">
+                                                <button class="p-2 text-chart-1 hover:bg-chart-1/10 rounded transition-colors" title="تعديل">
+                                                    <i class="bi bi-pencil text-sm"></i>
+                                                </button>
+                                                <button class="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors" title="حذف">
+                                                    <i class="bi bi-trash text-sm"></i>
+                                                </button>
+                                                <button class="p-2 text-muted-foreground hover:bg-muted rounded transition-colors" title="عرض">
+                                                    <i class="bi bi-eye text-sm"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    
+                                    <tr class="hover:bg-muted/50" data-mock="true">
+                                        <td class="py-4 px-4">
+                                            <div class="flex items-center space-x-3 space-x-reverse">
+                                                <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                                                    <span class="text-sm font-medium text-primary">مح</span>
+                                                </div>
+                                                <span class="font-medium text-card-foreground">محمود علي حسن</span>
+                                            </div>
+                                        </td>
+                                        <td class="py-4 px-4 text-card-foreground">mahmoud@example.com</td>
+                                        <td class="py-4 px-4 text-card-foreground">01012345678</td>
+                                        <td class="py-4 px-4">
+                                            <span class="bg-chart-3/10 text-chart-3 px-2 py-1 rounded-full text-xs font-medium">عميل</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="status-badge status-pending">في الانتظار</span>
+                                        </td>
+                                        <td class="py-4 px-4 text-muted-foreground text-sm">2024/01/20</td>
+                                        <td class="py-4 px-4">
+                                            <div class="flex items-center space-x-2 space-x-reverse">
+                                                <button class="p-2 text-chart-1 hover:bg-chart-1/10 rounded transition-colors" title="تعديل">
+                                                    <i class="bi bi-pencil text-sm"></i>
+                                                </button>
+                                                <button class="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors" title="حذف">
+                                                    <i class="bi bi-trash text-sm"></i>
+                                                </button>
+                                                <button class="p-2 text-muted-foreground hover:bg-muted rounded transition-colors" title="عرض">
+                                                    <i class="bi bi-eye text-sm"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <!-- @END_MAP )) -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Pagination -->
+                        <div class="border-t border-border px-6 py-4 flex items-center justify-between">
+                            <div class="text-sm text-muted-foreground">
+                                عرض 1-10 من 156 نتيجة
+                            </div>
+                            <div class="flex items-center space-x-2 space-x-reverse">
+                                <button class="px-3 py-2 border border-input rounded hover:bg-accent text-sm">السابق</button>
+                                <button class="px-3 py-2 bg-primary text-primary-foreground rounded text-sm">1</button>
+                                <button class="px-3 py-2 border border-input rounded hover:bg-accent text-sm">2</button>
+                                <button class="px-3 py-2 border border-input rounded hover:bg-accent text-sm">3</button>
+                                <button class="px-3 py-2 border border-input rounded hover:bg-accent text-sm">التالي</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- @END_COMPONENT: UsersPage -->
+
+                <!-- @COMPONENT: ServiceRequestsPage -->
+                <div id="service-requests-page" class="page-content">
+                    <div class="mb-8 flex items-center justify-between">
+                        <div>
+                            <h1 class="text-3xl font-bold text-foreground mb-2">طلبات الصيانة</h1>
+                            <p class="text-muted-foreground">إدارة ومتابعة طلبات الصيانة</p>
+                        </div>
+                        <button 
+                            id="add-service-request-btn" 
+                            data-event="click:showAddServiceRequestModal"
+                            class="bg-primary text-primary-foreground px-4 py-2 rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center space-x-2 space-x-reverse"
+                        >
+                            <i class="bi bi-plus-circle"></i>
+                            <span>طلب صيانة جديد</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Quick Stats -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                        <div class="bg-card rounded-lg border border-border p-4">
+                            <div class="flex items-center space-x-3 space-x-reverse">
+                                <div class="w-10 h-10 bg-chart-3/10 rounded-lg flex items-center justify-center">
+                                    <i class="bi bi-clock text-chart-3"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-muted-foreground">في الانتظار</p>
+                                    <p class="text-xl font-bold text-card-foreground" data-bind="stats.pending" data-mock="true">23</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-card rounded-lg border border-border p-4">
+                            <div class="flex items-center space-x-3 space-x-reverse">
+                                <div class="w-10 h-10 bg-chart-1/10 rounded-lg flex items-center justify-center">
+                                    <i class="bi bi-gear text-chart-1"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-muted-foreground">قيد التنفيذ</p>
+                                    <p class="text-xl font-bold text-card-foreground" data-bind="stats.inProgress" data-mock="true">15</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-card rounded-lg border border-border p-4">
+                            <div class="flex items-center space-x-3 space-x-reverse">
+                                <div class="w-10 h-10 bg-chart-2/10 rounded-lg flex items-center justify-center">
+                                    <i class="bi bi-check-circle text-chart-2"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-muted-foreground">مكتملة</p>
+                                    <p class="text-xl font-bold text-card-foreground" data-bind="stats.completed" data-mock="true">45</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-card rounded-lg border border-border p-4">
+                            <div class="flex items-center space-x-3 space-x-reverse">
+                                <div class="w-10 h-10 bg-destructive/10 rounded-lg flex items-center justify-center">
+                                    <i class="bi bi-x-circle text-destructive"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-muted-foreground">ملغية</p>
+                                    <p class="text-xl font-bold text-card-foreground" data-bind="stats.cancelled" data-mock="true">6</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Search and Filters -->
+                    <div class="bg-card rounded-lg border border-border p-6 mb-6">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-card-foreground mb-2">البحث</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="رقم الطلب أو اسم العميل..."
+                                    class="w-full px-4 py-2 border border-input rounded-lg bg-background text-foreground placeholder-muted-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
+                                >
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-card-foreground mb-2">الحالة</label>
+                                <select class="w-full px-4 py-2 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    <option value="">جميع الحالات</option>
+                                    <option value="pending">في الانتظار</option>
+                                    <option value="in-progress">قيد التنفيذ</option>
+                                    <option value="completed">مكتمل</option>
+                                    <option value="cancelled">ملغي</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-card-foreground mb-2">مركز الخدمة</label>
+                                <select class="w-full px-4 py-2 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    <option value="">جميع المراكز</option>
+                                    <option value="cairo">القاهرة الجديدة</option>
+                                    <option value="giza">الجيزة</option>
+                                    <option value="alex">الإسكندرية</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-card-foreground mb-2">التاريخ</label>
+                                <input 
+                                    type="date" 
+                                    class="w-full px-4 py-2 border border-input rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary focus:border-transparent"
+                                >
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Service Requests Table -->
+                    <div class="bg-card rounded-lg border border-border overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="bg-muted">
+                                    <tr>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">رقم الطلب</th>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">العميل</th>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">الجهاز</th>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">المشكلة</th>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">مركز الخدمة</th>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">الحالة</th>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">التاريخ</th>
+                                        <th class="text-right py-3 px-4 text-sm font-medium text-muted-foreground">الإجراءات</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border">
+                                    <!-- @MAP: serviceRequests.map(request => ( -->
+                                    <tr class="hover:bg-muted/50" data-mock="true">
+                                        <td class="py-4 px-4">
+                                            <span class="font-mono text-sm text-primary font-medium" data-bind="request.id">#SR-2024-001</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <div>
+                                                <p class="font-medium text-card-foreground" data-bind="request.customerName">أحمد محمد علي</p>
+                                                <p class="text-sm text-muted-foreground" data-bind="request.customerPhone">01234567890</p>
+                                            </div>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <div>
+                                                <p class="font-medium text-card-foreground" data-bind="request.deviceName">غسالة سوكاني 7 كيلو</p>
+                                                <p class="text-sm text-muted-foreground" data-bind="request.model">موديل: SW-700A</p>
+                                            </div>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <p class="text-sm text-card-foreground" data-bind="request.issue">لا تعمل دورة العصر</p>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="text-sm text-card-foreground" data-bind="request.serviceCenter">القاهرة الجديدة</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="status-badge status-pending" data-bind="request.status">في الانتظار</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="text-sm text-muted-foreground" data-bind="request.createdAt">2024/01/25</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <div class="flex items-center space-x-2 space-x-reverse">
+                                                <button 
+                                                    data-event="click:viewServiceRequest"
+                                                    class="p-2 text-chart-1 hover:bg-chart-1/10 rounded transition-colors"
+                                                    title="عرض التفاصيل"
+                                                >
+                                                    <i class="bi bi-eye text-sm"></i>
+                                                </button>
+                                                <button 
+                                                    data-event="click:editServiceRequest"
+                                                    class="p-2 text-chart-2 hover:bg-chart-2/10 rounded transition-colors"
+                                                    title="تعديل"
+                                                >
+                                                    <i class="bi bi-pencil text-sm"></i>
+                                                </button>
+                                                <button 
+                                                    data-event="click:deleteServiceRequest"
+                                                    class="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors"
+                                                    title="حذف"
+                                                >
+                                                    <i class="bi bi-trash text-sm"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    
+                                    <tr class="hover:bg-muted/50" data-mock="true">
+                                        <td class="py-4 px-4">
+                                            <span class="font-mono text-sm text-primary font-medium">#SR-2024-002</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <div>
+                                                <p class="font-medium text-card-foreground">سارة أحمد محمد</p>
+                                                <p class="text-sm text-muted-foreground">01123456789</p>
+                                            </div>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <div>
+                                                <p class="font-medium text-card-foreground">مكواة بخار</p>
+                                                <p class="text-sm text-muted-foreground">موديل: SI-200</p>
+                                            </div>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <p class="text-sm text-card-foreground">لا يخرج بخار</p>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="text-sm text-card-foreground">الجيزة</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="status-badge status-in-progress">قيد التنفيذ</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="text-sm text-muted-foreground">2024/01/24</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <div class="flex items-center space-x-2 space-x-reverse">
+                                                <button class="p-2 text-chart-1 hover:bg-chart-1/10 rounded transition-colors" title="عرض التفاصيل">
+                                                    <i class="bi bi-eye text-sm"></i>
+                                                </button>
+                                                <button class="p-2 text-chart-2 hover:bg-chart-2/10 rounded transition-colors" title="تعديل">
+                                                    <i class="bi bi-pencil text-sm"></i>
+                                                </button>
+                                                <button class="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors" title="حذف">
+                                                    <i class="bi bi-trash text-sm"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    
+                                    <tr class="hover:bg-muted/50" data-mock="true">
+                                        <td class="py-4 px-4">
+                                            <span class="font-mono text-sm text-primary font-medium">#SR-2024-003</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <div>
+                                                <p class="font-medium text-card-foreground">محمود علي حسن</p>
+                                                <p class="text-sm text-muted-foreground">01012345678</p>
+                                            </div>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <div>
+                                                <p class="font-medium text-card-foreground">خلاط كهربائي</p>
+                                                <p class="text-sm text-muted-foreground">موديل: BL-500</p>
+                                            </div>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <p class="text-sm text-card-foreground">صوت عالي أثناء التشغيل</p>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="text-sm text-card-foreground">الإسكندرية</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="status-badge status-completed">مكتمل</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <span class="text-sm text-muted-foreground">2024/01/23</span>
+                                        </td>
+                                        <td class="py-4 px-4">
+                                            <div class="flex items-center space-x-2 space-x-reverse">
+                                                <button class="p-2 text-chart-1 hover:bg-chart-1/10 rounded transition-colors" title="عرض التفاصيل">
+                                                    <i class="bi bi-eye text-sm"></i>
+                                                </button>
+                                                <button class="p-2 text-chart-2 hover:bg-chart-2/10 rounded transition-colors" title="تعديل">
+                                                    <i class="bi bi-pencil text-sm"></i>
+                                                </button>
+                                                <button class="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors" title="حذف">
+                                                    <i class="bi bi-trash text-sm"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <!-- @END_MAP )) -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Pagination -->
+                        <div class="border-t border-border px-6 py-4 flex items-center justify-between">
+                            <div class="text-sm text-muted-foreground">
+                                عرض 1-10 من 89 طلب
+                            </div>
+                            <div class="flex items-center space-x-2 space-x-reverse">
+                                <button class="px-3 py-2 border border-input rounded hover:bg-accent text-sm">السابق</button>
+                                <button class="px-3 py-2 bg-primary text-primary-foreground rounded text-sm">1</button>
+                                <button class="px-3 py-2 border border-input rounded hover:bg-accent text-sm">2</button>
+                                <button class="px-3 py-2 border border-input rounded hover:bg-accent text-sm">3</button>
+                                <button class="px-3 py-2 border border-input rounded hover:bg-accent text-sm">التالي</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- @END_COMPONENT: ServiceRequestsPage -->
+
+                <!-- Additional pages would be implemented similarly... -->
+                <!-- @COMPONENT: CentersPage, WarehousesPage, CustomersPage, CategoriesPage, TransfersPage, ReportsPage, ActivitiesPage, RolesPage, SettingsPage -->
+                
+                <!-- Placeholder for other pages -->
+                <div id="centers-page" class="page-content">
+                    <div class="text-center py-20">
+                        <i class="bi bi-building text-6xl text-muted-foreground mb-4"></i>
+                        <h2 class="text-2xl font-bold text-foreground mb-2">مراكز الخدمة</h2>
+                        <p class="text-muted-foreground">جاري تطوير هذه الصفحة...</p>
+                    </div>
+                </div>
+                
+                <div id="warehouses-page" class="page-content">
+                    <div class="text-center py-20">
+                        <i class="bi bi-shop text-6xl text-muted-foreground mb-4"></i>
+                        <h2 class="text-2xl font-bold text-foreground mb-2">المخازن</h2>
+                        <p class="text-muted-foreground">جاري تطوير هذه الصفحة...</p>
+                    </div>
+                </div>
+                
+                <div id="customers-page" class="page-content">
+                    <div class="text-center py-20">
+                        <i class="bi bi-person-badge text-6xl text-muted-foreground mb-4"></i>
+                        <h2 class="text-2xl font-bold text-foreground mb-2">العملاء</h2>
+                        <p class="text-muted-foreground">جاري تطوير هذه الصفحة...</p>
+                    </div>
+                </div>
+                
+                <div id="categories-page" class="page-content">
+                    <div class="text-center py-20">
+                        <i class="bi bi-diagram-3 text-6xl text-muted-foreground mb-4"></i>
+                        <h2 class="text-2xl font-bold text-foreground mb-2">الفئات والمنتجات</h2>
+                        <p class="text-muted-foreground">جاري تطوير هذه الصفحة...</p>
+                    </div>
+                </div>
+                
+                <div id="transfers-page" class="page-content">
+                    <div class="text-center py-20">
+                        <i class="bi bi-arrow-left-right text-6xl text-muted-foreground mb-4"></i>
+                        <h2 class="text-2xl font-bold text-foreground mb-2">تحويل قطع الغيار</h2>
+                        <p class="text-muted-foreground">جاري تطوير هذه الصفحة...</p>
+                    </div>
+                </div>
+                
+                <div id="reports-page" class="page-content">
+                    <div class="text-center py-20">
+                        <i class="bi bi-graph-up text-6xl text-muted-foreground mb-4"></i>
+                        <h2 class="text-2xl font-bold text-foreground mb-2">التقارير</h2>
+                        <p class="text-muted-foreground">جاري تطوير هذه الصفحة...</p>
+                    </div>
+                </div>
+                
+                <div id="activities-page" class="page-content">
+                    <div class="text-center py-20">
+                        <i class="bi bi-activity text-6xl text-muted-foreground mb-4"></i>
+                        <h2 class="text-2xl font-bold text-foreground mb-2">سجل الأنشطة</h2>
+                        <p class="text-muted-foreground">جاري تطوير هذه الصفحة...</p>
+                    </div>
+                </div>
+                
+                <div id="roles-page" class="page-content">
+                    <div class="text-center py-20">
+                        <i class="bi bi-shield-check text-6xl text-muted-foreground mb-4"></i>
+                        <h2 class="text-2xl font-bold text-foreground mb-2">الأدوار والصلاحيات</h2>
+                        <p class="text-muted-foreground">جاري تطوير هذه الصفحة...</p>
+                    </div>
+                </div>
+                
+                <div id="settings-page" class="page-content">
+                    <div class="text-center py-20">
+                        <i class="bi bi-gear text-6xl text-muted-foreground mb-4"></i>
+                        <h2 class="text-2xl font-bold text-foreground mb-2">الإعدادات</h2>
+                        <p class="text-muted-foreground">جاري تطوير هذه الصفحة...</p>
+                    </div>
+                </div>
+                <!-- @END_COMPONENT: Additional Pages -->
+                
+            </div>
+            <!-- @END_COMPONENT: MainContent -->
+        </div>
+    </div>
+    <!-- @END_COMPONENT: Dashboard -->
+
+    <script>
+    // TODO: Implement Supabase configuration and authentication
+    
+    (function() {
+        // Simple page state management
+        let currentPage = 'login-page';
+        let currentUser = null;
+        
+        // Page elements
+        const pages = {
+            login: document.getElementById('login-page'),
+            signup: document.getElementById('signup-page'),
+            waiting: document.getElementById('waiting-page'),
+            dashboard: document.getElementById('dashboard')
+        };
+        
+        // Content pages
+        const contentPages = {
+            'dashboard-page': document.getElementById('dashboard-page'),
+            'users-page': document.getElementById('users-page'),
+            'service-requests-page': document.getElementById('service-requests-page'),
+            'centers-page': document.getElementById('centers-page'),
+            'warehouses-page': document.getElementById('warehouses-page'),
+            'customers-page': document.getElementById('customers-page'),
+            'categories-page': document.getElementById('categories-page'),
+            'transfers-page': document.getElementById('transfers-page'),
+            'reports-page': document.getElementById('reports-page'),
+            'activities-page': document.getElementById('activities-page'),
+            'roles-page': document.getElementById('roles-page'),
+            'settings-page': document.getElementById('settings-page')
+        };
+        
+        // Navigation functions
+        function showPage(pageId) {
+            Object.values(pages).forEach(page => {
+                if (page) page.classList.add('hidden');
+            });
+            
+            if (pages[pageId]) {
+                pages[pageId].classList.remove('hidden');
+                currentPage = pageId;
+            }
+        }
+        
+        function showContentPage(pageId) {
+            Object.values(contentPages).forEach(page => {
+                if (page) {
+                    page.classList.remove('active');
+                    page.style.display = 'none';
+                }
+            });
+            
+            if (contentPages[pageId]) {
+                contentPages[pageId].classList.add('active');
+                contentPages[pageId].style.display = 'block';
+            }
+            
+            // Update sidebar active state
+            document.querySelectorAll('.sidebar-link').forEach(link => {
+                link.classList.remove('active');
+                if (link.dataset.page === pageId) {
+                    link.classList.add('active');
+                }
+            });
+        }
+        
+        // Authentication handlers
+        function handleLogin(event) {
+            event.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            // Show loading state
+            const loginBtn = event.target.querySelector('button[type="submit"]');
+            const loginText = document.getElementById('login-text');
+            const loginSpinner = document.getElementById('login-spinner');
+            
+            loginText.style.display = 'none';
+            loginSpinner.classList.remove('hidden');
+            loginBtn.disabled = true;
+            
+            // TODO: Implement Supabase authentication
+            setTimeout(() => {
+                // Simulate successful login
+                currentUser = { email, name: 'محمد أحمد' };
+                showPage('dashboard');
+                showContentPage('dashboard-page');
+                
+                // Reset login form
+                loginText.style.display = 'inline';
+                loginSpinner.classList.add('hidden');
+                loginBtn.disabled = false;
+                document.getElementById('login-form').reset();
+            }, 1500);
+        }
+        
+        function handleSignup(event) {
+            event.preventDefault();
+            // TODO: Implement Supabase user registration
+            showPage('waiting');
+        }
+        
+        function handleLogout() {
+            // TODO: Implement Supabase logout
+            currentUser = null;
+            showPage('login');
+        }
+        
+        // Mobile menu toggle
+        function toggleMobileMenu() {
+            const sidebar = document.querySelector('.sidebar');
+            sidebar.classList.toggle('open');
+        }
+        
+        // Theme toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            const themeIcon = document.querySelector('#theme-toggle i');
+            
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                themeIcon.className = 'bi bi-moon text-lg';
+            } else {
+                html.classList.add('dark');
+                themeIcon.className = 'bi bi-sun text-lg';
+            }
+        }
+        
+        // User dropdown toggle
+        function toggleUserDropdown() {
+            const dropdown = document.getElementById('user-dropdown');
+            dropdown.classList.toggle('hidden');
+        }
+        
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Login/Signup navigation
+            document.getElementById('show-signup')?.addEventListener('click', (e) => {
+                e.preventDefault();
+                showPage('signup');
+            });
+            
+            document.getElementById('show-login')?.addEventListener('click', (e) => {
+                e.preventDefault();
+                showPage('login');
+            });
+            
+            document.getElementById('back-to-login')?.addEventListener('click', (e) => {
+                e.preventDefault();
+                showPage('login');
+            });
+            
+            // Form submissions
+            document.getElementById('login-form')?.addEventListener('submit', handleLogin);
+            document.getElementById('signup-form')?.addEventListener('submit', handleSignup);
+            
+            // Dashboard navigation
+            document.getElementById('logout')?.addEventListener('click', (e) => {
+                e.preventDefault();
+                handleLogout();
+            });
+            
+            // Sidebar navigation
+            document.querySelectorAll('.sidebar-link').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const pageId = link.dataset.page;
+                    if (pageId) {
+                        showContentPage(pageId);
+                    }
+                });
+            });
+            
+            // Mobile menu
+            document.getElementById('mobile-menu-btn')?.addEventListener('click', toggleMobileMenu);
+            
+            // Theme toggle
+            document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
+            
+            // User dropdown
+            document.getElementById('user-menu-btn')?.addEventListener('click', toggleUserDropdown);
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                const userMenu = document.getElementById('user-menu-btn');
+                const dropdown = document.getElementById('user-dropdown');
+                
+                if (userMenu && dropdown && !userMenu.contains(e.target) && !dropdown.contains(e.target)) {
+                    dropdown.classList.add('hidden');
+                }
+            });
+            
+            // Close mobile menu when clicking outside
+            document.addEventListener('click', (e) => {
+                const sidebar = document.querySelector('.sidebar');
+                const mobileBtn = document.getElementById('mobile-menu-btn');
+                
+                if (sidebar && mobileBtn && !sidebar.contains(e.target) && !mobileBtn.contains(e.target)) {
+                    sidebar.classList.remove('open');
+                }
+            });
+        });
+        
+        // TODO: Implement CRUD operations for all entities
+        // TODO: Implement real-time updates with Supabase subscriptions
+        // TODO: Implement form validations and error handling
+        // TODO: Implement search and filtering functionality
+        // TODO: Implement data export functionality
+        // TODO: Implement proper loading states and user feedback
+        
+        // Expose functions globally for debugging
+        window.SokanyApp = {
+            showPage,
+            showContentPage,
+            handleLogin,
+            handleSignup,
+            handleLogout,
+            currentUser: () => currentUser
+        };
+    })();
+    </script>
+</body>
+</html>
