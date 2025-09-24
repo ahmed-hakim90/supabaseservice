@@ -1,3 +1,53 @@
+// Scrap Spare Parts table (الهالك)
+export const sparePartsScrap = pgTable("spare_parts_scrap", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  centerId: uuid("center_id").notNull(),
+  warehouseId: uuid("warehouse_id").notNull(),
+  sparePartId: uuid("spare_part_id").notNull(),
+  serviceRequestId: uuid("service_request_id"),
+  technicianId: uuid("technician_id").notNull(),
+  quantity: integer("quantity").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Spare Parts Shortages table (النواقص)
+export const sparePartsShortages = pgTable("spare_parts_shortages", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  centerId: uuid("center_id").notNull(),
+  warehouseId: uuid("warehouse_id").notNull(),
+  sparePartId: uuid("spare_part_id").notNull(),
+  quantityNeeded: integer("quantity_needed").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  status: text("status").notNull().default('open'), // open, resolved
+  resolvedAt: timestamp("resolved_at"),
+});
+export const insertSparePartsScrapSchema = createInsertSchema(sparePartsScrap).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  centerId: z.string(),
+  warehouseId: z.string(),
+  sparePartId: z.string(),
+  serviceRequestId: z.string().nullable().optional(),
+  technicianId: z.string(),
+});
+
+export const insertSparePartsShortageSchema = createInsertSchema(sparePartsShortages).omit({
+  id: true,
+  createdAt: true,
+  resolvedAt: true,
+}).extend({
+  centerId: z.string(),
+  warehouseId: z.string(),
+  sparePartId: z.string(),
+  quantityNeeded: z.number().min(1),
+  status: z.string().optional(),
+});
+export type InsertSparePartsScrap = z.infer<typeof insertSparePartsScrapSchema>;
+export type SparePartsScrap = typeof sparePartsScrap.$inferSelect;
+
+export type InsertSparePartsShortage = z.infer<typeof insertSparePartsShortageSchema>;
+export type SparePartsShortage = typeof sparePartsShortages.$inferSelect;
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, timestamp, uuid, integer, boolean, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
@@ -20,6 +70,7 @@ export const users = pgTable("users", {
   role: userRoleEnum("role").notNull().default('customer'),
   status: userStatusEnum("status").notNull().default('pending'),
   centerId: uuid("center_id"),
+  warehouseId: uuid("warehouse_id"), // New field for warehouse assignment
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -96,6 +147,16 @@ export const serviceRequestFollowUps = pgTable("service_request_follow_ups", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Service Request Follow-up Spare Parts Junction table (many-to-many)
+export const serviceRequestFollowUpSpareParts = pgTable("service_request_follow_up_spare_parts", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  followUpId: uuid("follow_up_id").notNull(),
+  sparePartId: uuid("spare_part_id").notNull(),
+  quantityUsed: integer("quantity_used").notNull().default(1),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Warehouses table
 export const warehouses = pgTable("warehouses", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -112,6 +173,7 @@ export const spareParts = pgTable("spare_parts", {
   name: text("name").notNull(),
   partNumber: text("part_number").notNull().unique(),
   categoryId: uuid("category_id"),
+  productId: uuid("product_id"), // New field to link with products
   price: integer("price"),
   description: text("description"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -165,6 +227,18 @@ export const activityLogs = pgTable("activity_logs", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// User Approvals table
+export const userApprovals = pgTable("user_approvals", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull(),
+  approvedBy: uuid("approved_by").notNull(),
+  role: userRoleEnum("role").notNull(),
+  centerId: uuid("center_id"),
+  warehouseId: uuid("warehouse_id"),
+  notes: text("notes"),
+  approvedAt: timestamp("approved_at").defaultNow(),
+});
+
 // Insert schemas - Modified for MemStorage compatibility
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -172,6 +246,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
   updatedAt: true,
 }).extend({
   centerId: z.string().nullable().optional().transform(val => val === "" ? null : val),
+  warehouseId: z.string().nullable().optional().transform(val => val === "" ? null : val),
 });
 
 export const insertServiceCenterSchema = createInsertSchema(serviceCenters).omit({
@@ -225,6 +300,7 @@ export const insertSparePartSchema = createInsertSchema(spareParts).omit({
   createdAt: true,
 }).extend({
   categoryId: z.string().nullable().optional(),
+  productId: z.string().nullable().optional(),
 });
 
 export const insertInventorySchema = createInsertSchema(inventory).omit({
@@ -263,6 +339,16 @@ export const insertActivityLogSchema = createInsertSchema(activityLogs).omit({
   entityId: z.string().nullable().optional(),
 });
 
+export const insertUserApprovalSchema = createInsertSchema(userApprovals).omit({
+  id: true,
+  approvedAt: true,
+}).extend({
+  userId: z.string(),
+  approvedBy: z.string(),
+  centerId: z.string().nullable().optional(),
+  warehouseId: z.string().nullable().optional(),
+});
+
 export const insertServiceRequestFollowUpSchema = createInsertSchema(serviceRequestFollowUps).omit({
   id: true,
   createdAt: true,
@@ -270,6 +356,15 @@ export const insertServiceRequestFollowUpSchema = createInsertSchema(serviceRequ
   serviceRequestId: z.string(),
   technicianId: z.string(),
   newStatus: z.enum(['pending', 'in_progress', 'completed', 'cancelled']).optional(),
+});
+
+export const insertServiceRequestFollowUpSparePartSchema = createInsertSchema(serviceRequestFollowUpSpareParts).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  followUpId: z.string(),
+  sparePartId: z.string(),
+  quantityUsed: z.number().min(1),
 });
 
 // Types
@@ -309,5 +404,11 @@ export type PartsTransfer = typeof partsTransfers.$inferSelect;
 export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
 export type ActivityLog = typeof activityLogs.$inferSelect;
 
+export type InsertUserApproval = z.infer<typeof insertUserApprovalSchema>;
+export type UserApproval = typeof userApprovals.$inferSelect;
+
 export type InsertServiceRequestFollowUp = z.infer<typeof insertServiceRequestFollowUpSchema>;
 export type ServiceRequestFollowUp = typeof serviceRequestFollowUps.$inferSelect;
+
+export type InsertServiceRequestFollowUpSparePart = z.infer<typeof insertServiceRequestFollowUpSparePartSchema>;
+export type ServiceRequestFollowUpSparePart = typeof serviceRequestFollowUpSpareParts.$inferSelect;

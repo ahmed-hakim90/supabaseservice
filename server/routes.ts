@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./drizzle-storage";
 import { z } from "zod";
 import bcrypt from "bcrypt";
+import { broadcastEvent } from "./websocket";
 import {
   insertUserSchema,
   insertServiceCenterSchema,
@@ -11,6 +12,7 @@ import {
   insertProductSchema,
   insertServiceRequestSchema,
   insertServiceRequestFollowUpSchema,
+  insertServiceRequestFollowUpSparePartSchema,
   insertWarehouseSchema,
   insertSparePartSchema,
   insertInventorySchema,
@@ -25,6 +27,7 @@ async function getCurrentUser(req: any): Promise<User | null> {
   if (!req.session?.user?.id) {
     return null;
   }
+  
   return (await storage.getUser(req.session.user.id)) || null;
 }
 
@@ -120,54 +123,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { email, password } = req.body;
+      console.log(`🔍 Login attempt - Email: ${email}, Password length: ${password?.length}`);
 
       if (!email || !password) {
+        console.log('❌ Missing email or password');
         return res
           .status(400)
           .json({ message: "البريد الإلكتروني وكلمة المرور مطلوبان" });
       }
 
-      // Temporary admin user fallback if database is not connected
-      if (email === "admin@sokany.com" && password === "Admin123!") {
-        const tempAdminUser = {
-          id: "temp-admin-001",
-          email: "admin@sokany.com",
-          password: "$2b$10$dummy.hash", // This won't be checked for temp user
-          fullName: "مدير النظام",
-          phone: "+966501234567",
-          address: null,
-          role: "admin" as const,
-          status: "active" as const,
-          centerId: null,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-
-        // Store user in session
-        (req as any).session.user = tempAdminUser;
-        console.log("✅ Temporary admin login successful");
-        return res.json(tempAdminUser);
-      }
-
+      // Get user from database
       let user;
       try {
         user = await storage.getUserByEmail(email);
+        console.log(`👤 User lookup result: ${user ? 'Found' : 'Not found'}`);
+        if (user) {
+          console.log(`   User ID: ${user.id}`);
+          console.log(`   User Role: ${user.role}`);
+          console.log(`   User Status: ${user.status}`);
+          console.log(`   Password hash: ${user.password.substring(0, 20)}...`);
+        }
       } catch (dbError) {
-        console.error("Database connection error, using fallback:", dbError);
-        return res.status(401).json({ message: "بيانات الدخول غير صحيحة" });
+        console.error("Database connection error:", dbError);
+        return res.status(500).json({ message: "خطأ في الاتصال بقاعدة البيانات" });
       }
 
       if (!user) {
+        console.log('❌ User not found in database');
         return res.status(401).json({ message: "بيانات الدخول غير صحيحة" });
       }
 
       // Verify password hash
+      console.log(`🔑 Comparing password "${password}" with hash...`);
       const isPasswordValid = await bcrypt.compare(password, user.password);
+      console.log(`🔑 Password comparison result: ${isPasswordValid ? '✅ Valid' : '❌ Invalid'}`);
+      
       if (!isPasswordValid) {
+        console.log('❌ Password validation failed');
         return res.status(401).json({ message: "بيانات الدخول غير صحيحة" });
       }
 
       if (user.status !== "active") {
+        console.log('❌ User status is not active:', user.status);
         return res
           .status(401)
           .json({ message: "الحساب غير مفعل، يرجى انتظار موافقة المسؤول" });
@@ -192,6 +189,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(user);
     } catch (error) {
       console.error("Login error:", error);
+      res.status(500).json({ message: "خطأ في الخادم" });
+    }
+  });
+
+  // Check current session
+  app.get("/api/auth/me", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "غير مسجل الدخول" });
+      }
+      res.json(currentUser);
+    } catch (error) {
+      console.error("Get current user error:", error);
+      res.status(500).json({ message: "خطأ في الخادم" });
+    }
+  });
+
+  // Logout
+  app.post("/api/auth/logout", async (req, res) => {
+    try {
+      req.session.destroy((err) => {
+        if (err) {
+          console.error("Session destroy error:", err);
+          return res.status(500).json({ message: "خطأ في تسجيل الخروج" });
+        }
+        res.clearCookie('connect.sid');
+        res.json({ message: "تم تسجيل الخروج بنجاح" });
+      });
+    } catch (error) {
+      console.error("Logout error:", error);
       res.status(500).json({ message: "خطأ في الخادم" });
     }
   });
@@ -348,6 +376,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.warn("Could not log activity:", logError);
       }
 
+      // Broadcast real-time event
+      broadcastEvent('user-created', {
+        user: { ...user, password: undefined }, // Don't send password
+        centerId: user.centerId
+      }, {
+        toAll: true,
+        toCenters: user.centerId ? [user.centerId] : [],
+        toRoles: ['admin', 'manager']
+      });
+
       res.status(201).json(user);
     } catch (error) {
       console.error("Create user error:", error);
@@ -372,6 +410,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entityType: "user",
         entityId: user.id,
         description: `تم تحديث بيانات المستخدم: ${user.fullName}`,
+      });
+
+      // Broadcast real-time event
+      broadcastEvent('user-updated', {
+        user: { ...user, password: undefined }, // Don't send password
+        centerId: user.centerId
+      }, {
+        toAll: true,
+        toCenters: user.centerId ? [user.centerId] : [],
+        toRoles: ['admin', 'manager']
       });
 
       res.json(user);
@@ -404,10 +452,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `تم حذف المستخدم: ${user.fullName}`,
       });
 
+      // Broadcast real-time event
+      broadcastEvent('user-deleted', {
+        userId: req.params.id,
+        centerId: user.centerId
+      }, {
+        toAll: true,
+        toCenters: user.centerId ? [user.centerId] : [],
+        toRoles: ['admin', 'manager']
+      });
+
       res.json({ message: "تم حذف المستخدم بنجاح" });
     } catch (error) {
       console.error("Delete user error:", error);
       res.status(500).json({ message: "خطأ في حذف المستخدم" });
+    }
+  });
+
+  // Get technicians by center
+  app.get("/api/technicians", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      // Only managers and admins can get technicians for assignment
+      if (currentUser.role !== "manager" && currentUser.role !== "admin") {
+        return res.status(403).json({ message: "ليس لديك صلاحية لعرض الفنيين" });
+      }
+
+      let allUsers;
+      try {
+        allUsers = await storage.getAllUsers();
+      } catch (dbError) {
+        console.error("Database connection error while fetching technicians:", dbError);
+        return res.json([]);
+      }
+
+      // Filter to get only technicians
+      let technicians = allUsers.filter(user => user.role === 'technician' && user.status === 'active');
+
+      // If user is a manager, show only technicians from their center
+      if (currentUser.role === "manager") {
+        technicians = technicians.filter(tech => tech.centerId === currentUser.centerId);
+      }
+
+      // Return only necessary fields for assignment
+      const techniciansList = technicians.map(tech => ({
+        id: tech.id,
+        fullName: tech.fullName,
+        email: tech.email,
+        phone: tech.phone,
+        centerId: tech.centerId
+      }));
+
+      res.json(techniciansList);
+    } catch (error) {
+      console.error("Get technicians error:", error);
+      res.status(500).json({ message: "خطأ في جلب بيانات الفنيين" });
     }
   });
 
@@ -520,6 +623,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Customers CRUD
+  // Get customer users (users with role 'customer')
+  app.get("/api/customer-users", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      // Get all users and filter for customers only
+      const allUsers = await storage.getAllUsers();
+      let customerUsers = allUsers.filter(user => user.role === 'customer');
+
+      // Apply additional filtering based on current user role
+      if (currentUser.role === "manager" || currentUser.role === "receptionist" || currentUser.role === "technician") {
+        // Staff can see customers from their center only
+        customerUsers = customerUsers.filter(
+          (user) => user.centerId === currentUser.centerId,
+        );
+      } else if (currentUser.role === "customer") {
+        // Customer can only see themselves
+        customerUsers = customerUsers.filter(
+          (user) => user.id === currentUser.id,
+        );
+      } else if (currentUser.role === "warehouse_manager") {
+        // Warehouse manager doesn't need customer access
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لعرض العملاء" });
+      }
+      // Admin can see all customer users
+
+      res.json(customerUsers);
+    } catch (error) {
+      console.error("Get customer users error:", error);
+      res.status(500).json({ message: "خطأ في جلب بيانات المستخدمين العملاء" });
+    }
+  });
+
   app.get("/api/customers", async (req, res) => {
     try {
       const currentUser = await getCurrentUser(req);
@@ -766,6 +907,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `تم إضافة متابعة لطلب الصيانة: ${serviceRequest.requestNumber}`,
       });
 
+      // Broadcast real-time event
+      broadcastEvent('service-request-follow-up', {
+        followUp,
+        serviceRequest,
+        centerId: serviceRequest.centerId
+      }, {
+        toAll: true,
+        toCenters: [serviceRequest.centerId],
+        toRoles: ['manager', 'admin', 'technician', 'customer']
+      });
+
       res.status(201).json(followUp);
     } catch (error) {
       console.error("Create follow-up error:", error);
@@ -775,6 +927,168 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في إضافة المتابعة" });
+    }
+  });
+
+  // Assign technician to service request
+  app.put("/api/service-requests/:id/assign-technician", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      // Only managers and admins can assign technicians
+      if (currentUser.role !== "manager" && currentUser.role !== "admin") {
+        return res.status(403).json({ message: "ليس لديك صلاحية لتعيين الفنيين" });
+      }
+
+      const { technicianId } = req.body;
+
+      // Validate technician exists and is active
+      if (technicianId) {
+        const technician = await storage.getUser(technicianId);
+        if (!technician) {
+          return res.status(400).json({ message: "الفني غير موجود" });
+        }
+        if (technician.role !== "technician") {
+          return res.status(400).json({ message: "المستخدم المحدد ليس فنياً" });
+        }
+        if (technician.status !== "active") {
+          return res.status(400).json({ message: "الفني غير نشط" });
+        }
+
+        // If current user is a manager, ensure technician is from their center
+        if (currentUser.role === "manager" && technician.centerId !== currentUser.centerId) {
+          return res.status(403).json({ message: "لا يمكنك تعيين فني من مركز آخر" });
+        }
+      }
+
+      // Get the service request
+      const serviceRequest = await storage.getServiceRequest(req.params.id);
+      if (!serviceRequest) {
+        return res.status(404).json({ message: "طلب الصيانة غير موجود" });
+      }
+
+      // If current user is a manager, ensure request is from their center
+      if (currentUser.role === "manager" && serviceRequest.centerId !== currentUser.centerId) {
+        return res.status(403).json({ message: "لا يمكنك تعديل طلب من مركز آخر" });
+      }
+
+      // Update the service request with new technician
+      const updateData = {
+        technicianId: technicianId || null,
+        updatedAt: new Date(),
+      };
+
+      await storage.updateServiceRequest(req.params.id, updateData);
+
+      // Log activity
+      const actionDescription = technicianId 
+        ? `تم تعيين الفني للطلب ${serviceRequest.requestNumber}`
+        : `تم إلغاء تعيين الفني من الطلب ${serviceRequest.requestNumber}`;
+      
+      await storage.logActivity({
+        userId: currentUser.id,
+        action: "update",
+        entityType: "service_request",
+        entityId: req.params.id,
+        description: actionDescription,
+      });
+
+      // Broadcast real-time event
+      broadcastEvent('service-request-assigned', {
+        serviceRequestId: req.params.id,
+        technicianId: technicianId,
+        centerId: serviceRequest.centerId
+      }, {
+        toAll: true,
+        toCenters: [serviceRequest.centerId],
+        toRoles: ['manager', 'admin', 'technician']
+      });
+
+      res.json({ message: technicianId ? "تم تعيين الفني بنجاح" : "تم إلغاء تعيين الفني بنجاح" });
+    } catch (error) {
+      console.error("Assign technician error:", error);
+      res.status(500).json({ message: "خطأ في تعيين الفني" });
+    }
+  });
+
+  // Spare Parts CRUD
+  app.get("/api/spare-parts", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      // Only technicians, warehouse managers, managers and admins can view spare parts
+      if (!["technician", "warehouse_manager", "manager", "admin"].includes(currentUser.role)) {
+        return res.status(403).json({ message: "ليس لديك صلاحية لعرض قطع الغيار" });
+      }
+
+      const allSpareParts = await storage.getAllSpareParts();
+      res.json(allSpareParts);
+    } catch (error) {
+      console.error("Get spare parts error:", error);
+      res.status(500).json({ message: "خطأ في جلب بيانات قطع الغيار" });
+    }
+  });
+
+  app.get("/api/spare-parts/:id", async (req, res) => {
+    try {
+      const sparePart = await storage.getSparePart(req.params.id);
+      if (!sparePart) {
+        return res.status(404).json({ message: "قطعة الغيار غير موجودة" });
+      }
+      res.json(sparePart);
+    } catch (error) {
+      console.error("Get spare part error:", error);
+      res.status(500).json({ message: "خطأ في جلب بيانات قطعة الغيار" });
+    }
+  });
+
+  app.post("/api/spare-parts", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      // Only warehouse managers, managers and admins can create spare parts
+      if (!["warehouse_manager", "manager", "admin"].includes(currentUser.role)) {
+        return res.status(403).json({ message: "ليس لديك صلاحية لإضافة قطع الغيار" });
+      }
+
+      const sparePartData = insertSparePartSchema.parse(req.body);
+      const sparePart = await storage.createSparePart(sparePartData);
+
+      // Log activity
+      await storage.logActivity({
+        userId: currentUser.id,
+        action: "create",
+        entityType: "spare_part",
+        entityId: sparePart.id,
+        description: `تم إضافة قطعة غيار جديدة: ${sparePart.name}`,
+      });
+
+      // Broadcast real-time event
+      broadcastEvent('product-created', {
+        sparePart,
+      }, {
+        toAll: true,
+        toRoles: ['technician', 'warehouse_manager', 'manager', 'admin']
+      });
+
+      res.status(201).json(sparePart);
+    } catch (error) {
+      console.error("Create spare part error:", error);
+      if (error instanceof z.ZodError) {
+        return res
+          .status(400)
+          .json({ message: "بيانات غير صحيحة", errors: error.errors });
+      }
+      res.status(500).json({ message: "خطأ في إضافة قطعة الغيار" });
     }
   });
 
@@ -968,17 +1282,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/categories", async (req, res) => {
     try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
       const categoryData = insertCategorySchema.parse(req.body);
       const category = await storage.createCategory(categoryData);
 
       // Log activity
-      await storage.logActivity({
-        userId: "",
-        action: "create",
-        entityType: "category",
-        entityId: category.id,
-        description: `تم إضافة فئة جديدة: ${category.name}`,
-      });
+      try {
+        await storage.logActivity({
+          userId: currentUser.id,
+          action: "create",
+          entityType: "category",
+          entityId: category.id,
+          description: `تم إضافة فئة جديدة: ${category.name}`,
+        });
+      } catch (logError) {
+        console.warn("Could not log activity:", logError);
+      }
 
       res.status(201).json(category);
     } catch (error) {
@@ -994,6 +1317,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/categories/:id", async (req, res) => {
     try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
       const categoryData = insertCategorySchema.partial().parse(req.body);
       const category = await storage.updateCategory(
         req.params.id,
@@ -1001,13 +1329,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       // Log activity
-      await storage.logActivity({
-        userId: "",
-        action: "update",
-        entityType: "category",
-        entityId: category.id,
-        description: `تم تحديث الفئة: ${category.name}`,
-      });
+      try {
+        await storage.logActivity({
+          userId: currentUser.id,
+          action: "update",
+          entityType: "category",
+          entityId: category.id,
+          description: `تم تحديث الفئة: ${category.name}`,
+        });
+      } catch (logError) {
+        console.warn("Could not log activity:", logError);
+      }
 
       res.json(category);
     } catch (error) {
@@ -1023,6 +1355,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/categories/:id", async (req, res) => {
     try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
       const category = await storage.getCategory(req.params.id);
       if (!category) {
         return res.status(404).json({ message: "الفئة غير موجودة" });
@@ -1031,13 +1368,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteCategory(req.params.id);
 
       // Log activity
-      await storage.logActivity({
-        userId: "",
-        action: "delete",
-        entityType: "category",
-        entityId: req.params.id,
-        description: `تم حذف الفئة: ${category.name}`,
-      });
+      try {
+        await storage.logActivity({
+          userId: currentUser.id,
+          action: "delete",
+          entityType: "category",
+          entityId: req.params.id,
+          description: `تم حذف الفئة: ${category.name}`,
+        });
+      } catch (logError) {
+        console.warn("Could not log activity:", logError);
+      }
 
       res.json({ message: "تم حذف الفئة بنجاح" });
     } catch (error) {
@@ -1059,17 +1400,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/products", async (req, res) => {
     try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
       const productData = insertProductSchema.parse(req.body);
       const product = await storage.createProduct(productData);
 
       // Log activity
-      await storage.logActivity({
-        userId: "",
-        action: "create",
-        entityType: "product",
-        entityId: product.id,
-        description: `تم إضافة منتج جديد: ${product.name}`,
-      });
+      try {
+        await storage.logActivity({
+          userId: currentUser.id,
+          action: "create",
+          entityType: "product",
+          entityId: product.id,
+          description: `تم إضافة منتج جديد: ${product.name}`,
+        });
+      } catch (logError) {
+        console.warn("Could not log activity:", logError);
+      }
 
       res.status(201).json(product);
     } catch (error) {
@@ -1085,17 +1435,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/products/:id", async (req, res) => {
     try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
       const productData = insertProductSchema.partial().parse(req.body);
       const product = await storage.updateProduct(req.params.id, productData);
 
       // Log activity
-      await storage.logActivity({
-        userId: "",
-        action: "update",
-        entityType: "product",
-        entityId: product.id,
-        description: `تم تحديث المنتج: ${product.name}`,
-      });
+      try {
+        await storage.logActivity({
+          userId: currentUser.id,
+          action: "update",
+          entityType: "product",
+          entityId: product.id,
+          description: `تم تحديث المنتج: ${product.name}`,
+        });
+      } catch (logError) {
+        console.warn("Could not log activity:", logError);
+      }
 
       res.json(product);
     } catch (error) {
@@ -1111,6 +1470,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/products/:id", async (req, res) => {
     try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
       const product = await storage.getProduct(req.params.id);
       if (!product) {
         return res.status(404).json({ message: "المنتج غير موجود" });
@@ -1119,13 +1483,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteProduct(req.params.id);
 
       // Log activity
-      await storage.logActivity({
-        userId: "",
-        action: "delete",
-        entityType: "product",
-        entityId: req.params.id,
-        description: `تم حذف المنتج: ${product.name}`,
-      });
+      try {
+        await storage.logActivity({
+          userId: currentUser.id,
+          action: "delete",
+          entityType: "product",
+          entityId: req.params.id,
+          description: `تم حذف المنتج: ${product.name}`,
+        });
+      } catch (logError) {
+        console.warn("Could not log activity:", logError);
+      }
 
       res.json({ message: "تم حذف المنتج بنجاح" });
     } catch (error) {
@@ -1375,24 +1743,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Service Requests with Follow-ups
+  app.get("/api/service-requests-with-followups", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      const allRequests = await storage.getAllServiceRequestsWithFollowUps();
+      let filteredRequests = allRequests;
+
+      // Filter based on user role and permissions
+      if (currentUser.role === "technician") {
+        // Technician can only see requests assigned to them
+        filteredRequests = allRequests.filter(
+          (req) => req.technicianId === currentUser.id,
+        );
+      } else if (currentUser.role === "receptionist") {
+        // Receptionist can see requests from their center
+        filteredRequests = allRequests.filter(
+          (req) => req.centerId === currentUser.centerId,
+        );
+      } else if (currentUser.role === "customer") {
+        // Customer can only see their own requests
+        filteredRequests = allRequests.filter(
+          (req) => req.customerId === currentUser.id,
+        );
+      } else if (currentUser.role === "warehouse_manager") {
+        // Warehouse manager cannot see service requests
+        return res
+          .status(403)
+          .json({ message: "ليس لديك صلاحية لعرض طلبات الصيانة" });
+      }
+
+      res.json(filteredRequests);
+    } catch (error) {
+      console.error("Get service requests with follow-ups error:", error);
+      res.status(500).json({ message: "خطأ في جلب بيانات طلبات الصيانة" });
+    }
+  });
+
   app.post("/api/service-requests", async (req, res) => {
     try {
+      console.log("Received service request data:", JSON.stringify(req.body, null, 2));
       const requestData = insertServiceRequestSchema.parse(req.body);
+      console.log("Parsed service request data:", JSON.stringify(requestData, null, 2));
       const serviceRequest = await storage.createServiceRequest(requestData);
+      console.log("Created service request:", JSON.stringify(serviceRequest, null, 2));
 
-      // Log activity
-      await storage.logActivity({
-        userId: serviceRequest.technicianId || "",
-        action: "create",
-        entityType: "service_request",
-        entityId: serviceRequest.id,
-        description: `تم إضافة طلب صيانة جديد: ${serviceRequest.requestNumber}`,
+      // Get current user for activity logging
+      const currentUser = await getCurrentUser(req);
+      
+      // Log activity only if we have a valid user
+      if (currentUser?.id) {
+        try {
+          await storage.logActivity({
+            userId: currentUser.id,
+            action: "create",
+            entityType: "service_request",
+            entityId: serviceRequest.id,
+            description: `تم إضافة طلب صيانة جديد: ${serviceRequest.requestNumber}`,
+          });
+        } catch (logError) {
+          console.warn("Could not log activity:", logError);
+        }
+      }
+
+      // Broadcast real-time event
+      broadcastEvent('service-request-created', {
+        serviceRequest,
+        centerId: serviceRequest.centerId
+      }, {
+        toAll: true,
+        toCenters: [serviceRequest.centerId],
+        toRoles: ['manager', 'admin', 'receptionist']
       });
 
       res.status(201).json(serviceRequest);
     } catch (error) {
       console.error("Create service request error:", error);
+      console.error("Error details:", error instanceof Error ? error.message : String(error));
       if (error instanceof z.ZodError) {
+        console.error("Zod validation errors:", error.errors);
         return res
           .status(400)
           .json({ message: "بيانات غير صحيحة", errors: error.errors });
@@ -1416,6 +1849,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entityType: "service_request",
         entityId: serviceRequest.id,
         description: `تم تحديث طلب الصيانة: ${serviceRequest.requestNumber}`,
+      });
+
+      // Broadcast real-time event
+      broadcastEvent('service-request-updated', {
+        serviceRequest,
+        centerId: serviceRequest.centerId
+      }, {
+        toAll: true,
+        toCenters: [serviceRequest.centerId],
+        toRoles: ['manager', 'admin', 'technician', 'receptionist']
       });
 
       res.json(serviceRequest);
@@ -1446,6 +1889,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entityType: "service_request",
         entityId: req.params.id,
         description: `تم حذف طلب الصيانة: ${serviceRequest.requestNumber}`,
+      });
+
+      // Broadcast real-time event
+      broadcastEvent('service-request-deleted', {
+        serviceRequestId: req.params.id,
+        centerId: serviceRequest.centerId
+      }, {
+        toAll: true,
+        toCenters: [serviceRequest.centerId],
+        toRoles: ['manager', 'admin', 'receptionist']
       });
 
       res.json({ message: "تم حذف طلب الصيانة بنجاح" });
@@ -1632,18 +2085,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .json({ message: "ليس لديك صلاحية لتصدير البيانات" });
       }
 
-      // Get all data
-      const data = {
-        users: await storage.getAllUsers(),
-        serviceCenters: await storage.getAllServiceCenters(),
-        customers: await storage.getAllCustomers(),
-        categories: await storage.getAllCategories(),
-        products: await storage.getAllProducts(),
-        warehouses: await storage.getAllWarehouses(),
-        serviceRequests: await storage.getAllServiceRequests(),
+      // Get selected data types from query parameters
+      const selectedTypes = req.query.types;
+      const typesToExport = Array.isArray(selectedTypes) ? selectedTypes : (selectedTypes ? [selectedTypes] : []);
+      
+      // Default to all types if none specified
+      const availableTypes = [
+        'users', 'serviceCenters', 'customers', 'categories', 
+        'products', 'warehouses', 'spareParts', 'inventory', 
+        'serviceRequests', 'serviceRequestFollowUps'
+      ];
+      
+      const exportTypes = typesToExport.length > 0 ? typesToExport : availableTypes;
+      
+      // Build data object based on selected types
+      const data: any = {
         exportDate: new Date().toISOString(),
         exportedBy: currentUser.fullName,
+        exportedTypes: exportTypes
       };
+
+      if (exportTypes.includes('users')) {
+        data.users = await storage.getAllUsers();
+      }
+      if (exportTypes.includes('serviceCenters')) {
+        data.serviceCenters = await storage.getAllServiceCenters();
+      }
+      if (exportTypes.includes('customers')) {
+        data.customers = await storage.getAllCustomers();
+      }
+      if (exportTypes.includes('categories')) {
+        data.categories = await storage.getAllCategories();
+      }
+      if (exportTypes.includes('products')) {
+        data.products = await storage.getAllProducts();
+      }
+      if (exportTypes.includes('warehouses')) {
+        data.warehouses = await storage.getAllWarehouses();
+      }
+      if (exportTypes.includes('spareParts')) {
+        // Get all spare parts - we'll need to implement this
+        data.spareParts = []; // TODO: implement getAllSpareParts
+      }
+      if (exportTypes.includes('inventory')) {
+        // Get all inventory - we'll need to implement this
+        data.inventory = []; // TODO: implement getAllInventory
+      }
+      if (exportTypes.includes('serviceRequests')) {
+        data.serviceRequests = await storage.getAllServiceRequests();
+      }
+      if (exportTypes.includes('serviceRequestFollowUps')) {
+        // Get all follow-ups for all service requests
+        const allServiceRequests = await storage.getAllServiceRequests();
+        const allFollowUps = [];
+        for (const request of allServiceRequests) {
+          const followUps = await storage.getServiceRequestFollowUps(request.id);
+          allFollowUps.push(...followUps);
+        }
+        data.serviceRequestFollowUps = allFollowUps;
+      }
 
       // Log activity
       await storage.logActivity({
@@ -1651,14 +2151,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "export",
         entityType: "system_data",
         entityId: null,
-        description: `تم تصدير البيانات بواسطة ${currentUser.fullName}`,
+        description: `تم تصدير البيانات (${exportTypes.join(', ')}) بواسطة ${currentUser.fullName}`,
       });
 
       // Set headers for file download
       res.setHeader("Content-Type", "application/json");
+      const filename = exportTypes.length === availableTypes.length 
+        ? `sokany-backup-all-${new Date().toISOString().split("T")[0]}.json`
+        : `sokany-backup-${exportTypes.join('-')}-${new Date().toISOString().split("T")[0]}.json`;
+      
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename="sokany-backup-${new Date().toISOString().split("T")[0]}.json"`,
+        `attachment; filename="${filename}"`,
       );
       res.json(data);
     } catch (error) {
@@ -1807,6 +2311,467 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Import data error:", error);
       res.status(500).json({ message: "خطأ في استيراد البيانات" });
+    }
+  });
+
+  // Follow-up spare parts management endpoints
+  app.post("/api/service-request-follow-ups/:id/spare-parts", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      // Only technicians and above can add spare parts to follow-ups
+      if (!["technician", "manager", "admin"].includes(currentUser.role)) {
+        return res.status(403).json({ message: "ليس لديك صلاحية لإضافة قطع الغيار للمتابعة" });
+      }
+
+      const followUpId = req.params.id;
+      const sparePartsData = req.body.spareParts;
+
+      if (!Array.isArray(sparePartsData)) {
+        return res.status(400).json({ message: "البيانات يجب أن تكون مصفوفة من قطع الغيار" });
+      }
+
+      await storage.addSparePartsToFollowUp(followUpId, sparePartsData);
+
+      const followUpWithSpareParts = await storage.getFollowUpWithSpareParts(followUpId);
+
+      // Log activity
+      await storage.logActivity({
+        userId: currentUser.id,
+        action: "update",
+        entityType: "service_request_follow_up",
+        entityId: followUpId,
+        description: `تم إضافة ${sparePartsData.length} قطعة غيار للمتابعة`,
+      });
+
+      // Broadcast real-time event
+      broadcastEvent('follow-up-updated', {
+        followUp: followUpWithSpareParts,
+      }, {
+        toAll: true,
+        ...(followUpWithSpareParts.serviceRequest?.centerId && {
+          toCenters: [followUpWithSpareParts.serviceRequest.centerId]
+        })
+      });
+
+      res.json(followUpWithSpareParts);
+    } catch (error) {
+      console.error("Add spare parts to follow-up error:", error);
+      res.status(500).json({ message: "خطأ في إضافة قطع الغيار للمتابعة" });
+    }
+  });
+
+  // Get follow-up with spare parts
+  app.get("/api/service-request-follow-ups/:id/spare-parts", async (req, res) => {
+    try {
+      const followUpId = req.params.id;
+      const followUpWithSpareParts = await storage.getFollowUpWithSpareParts(followUpId);
+
+      if (!followUpWithSpareParts) {
+        return res.status(404).json({ message: "المتابعة غير موجودة" });
+      }
+
+      res.json(followUpWithSpareParts);
+    } catch (error) {
+      console.error("Get follow-up with spare parts error:", error);
+      res.status(500).json({ message: "خطأ في جلب بيانات المتابعة مع قطع الغيار" });
+    }
+  });
+
+  // Remove spare parts from follow-up
+  app.delete("/api/service-request-follow-ups/:id/spare-parts", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      // Only technicians and above can remove spare parts from follow-ups
+      if (!["technician", "manager", "admin"].includes(currentUser.role)) {
+        return res.status(403).json({ message: "ليس لديك صلاحية لإزالة قطع الغيار من المتابعة" });
+      }
+
+      const followUpId = req.params.id;
+      const { sparePartIds } = req.body;
+
+      if (!Array.isArray(sparePartIds)) {
+        return res.status(400).json({ message: "البيانات يجب أن تكون مصفوفة من معرفات قطع الغيار" });
+      }
+
+      await storage.removeSparePartsFromFollowUp(followUpId, sparePartIds);
+
+      const followUpWithSpareParts = await storage.getFollowUpWithSpareParts(followUpId);
+
+      // Log activity
+      await storage.logActivity({
+        userId: currentUser.id,
+        action: "update",
+        entityType: "service_request_follow_up",
+        entityId: followUpId,
+        description: `تم إزالة ${sparePartIds.length} قطعة غيار من المتابعة`,
+      });
+
+      // Broadcast real-time event
+      broadcastEvent('follow-up-updated', {
+        followUp: followUpWithSpareParts,
+      }, {
+        toAll: true,
+        ...(followUpWithSpareParts.serviceRequest?.centerId && {
+          toCenters: [followUpWithSpareParts.serviceRequest.centerId]
+        })
+      });
+
+      res.json(followUpWithSpareParts);
+    } catch (error) {
+      console.error("Remove spare parts from follow-up error:", error);
+      res.status(500).json({ message: "خطأ في إزالة قطع الغيار من المتابعة" });
+    }
+  });
+
+  // Temporary endpoint to insert test data
+  app.post("/api/insert-test-data", async (req, res) => {
+    try {
+      // Temporarily remove authentication for testing
+      // const currentUser = await getCurrentUser(req);
+      // if (!currentUser || currentUser.role !== "admin") {
+      //   return res.status(403).json({ message: "الصلاحية محدودة للمسؤولين فقط" });
+      // }
+
+      // Insert categories
+      const categoriesData = [
+        { id: 'cat-ac', name: 'مكيفات هواء', description: 'أجهزة التكييف والتبريد المنزلية والتجارية' },
+        { id: 'cat-ref', name: 'ثلاجات', description: 'ثلاجات منزلية ومبردات' },
+        { id: 'cat-wash', name: 'غسالات', description: 'غسالات الملابس والأطباق' },
+        { id: 'cat-kitchen', name: 'أجهزة مطبخ', description: 'أجهزة المطبخ الكهربائية مثل الميكروويف والفرن' },
+        { id: 'cat-heat', name: 'أجهزة تسخين', description: 'سخانات المياه والدفايات' },
+      ];
+
+      for (const categoryData of categoriesData) {
+        try {
+          await storage.createCategory(categoryData);
+        } catch (error) {
+          // Ignore if already exists
+          console.log(`Category ${categoryData.name} might already exist`);
+        }
+      }
+
+      // Insert products
+      const productsData = [
+        // مكيفات هواء
+        { id: 'prod-ac-1', name: 'مكيف شباك سوكاني', model: 'SK-AC-12K', categoryId: 'cat-ac', description: 'مكيف شباك 12 ألف وحدة تبريد' },
+        { id: 'prod-ac-2', name: 'مكيف اسبليت سوكاني', model: 'SK-SP-18K', categoryId: 'cat-ac', description: 'مكيف اسبليت 18 ألف وحدة تبريد' },
+        { id: 'prod-ac-3', name: 'مكيف شباك سوكاني صغير', model: 'SK-AC-9K', categoryId: 'cat-ac', description: 'مكيف شباك 9 ألف وحدة تبريد' },
+        
+        // ثلاجات
+        { id: 'prod-ref-1', name: 'ثلاجة سوكاني بابين', model: 'SK-REF-350L', categoryId: 'cat-ref', description: 'ثلاجة بابين سعة 350 لتر' },
+        { id: 'prod-ref-2', name: 'ثلاجة سوكاني باب واحد', model: 'SK-REF-200L', categoryId: 'cat-ref', description: 'ثلاجة باب واحد سعة 200 لتر' },
+        { id: 'prod-ref-3', name: 'فريزر سوكاني', model: 'SK-FRZ-150L', categoryId: 'cat-ref', description: 'فريزر أفقي سعة 150 لتر' },
+        
+        // غسالات
+        { id: 'prod-wash-1', name: 'غسالة سوكاني فوق أوتوماتيك', model: 'SK-WM-7KG', categoryId: 'cat-wash', description: 'غسالة فوق أوتوماتيك سعة 7 كيلو' },
+        { id: 'prod-wash-2', name: 'غسالة سوكاني تحميل علوي', model: 'SK-WT-10KG', categoryId: 'cat-wash', description: 'غسالة تحميل علوي سعة 10 كيلو' },
+        
+        // أجهزة مطبخ
+        { id: 'prod-kit-1', name: 'ميكروويف سوكاني', model: 'SK-MW-25L', categoryId: 'cat-kitchen', description: 'ميكروويف سعة 25 لتر' },
+        { id: 'prod-kit-2', name: 'فرن كهربائي سوكاني', model: 'SK-OV-42L', categoryId: 'cat-kitchen', description: 'فرن كهربائي سعة 42 لتر' },
+        
+        // أجهزة تسخين
+        { id: 'prod-heat-1', name: 'سخان مياه سوكاني', model: 'SK-WH-50L', categoryId: 'cat-heat', description: 'سخان مياه كهربائي سعة 50 لتر' },
+        { id: 'prod-heat-2', name: 'دفاية زيت سوكاني', model: 'SK-OH-2000W', categoryId: 'cat-heat', description: 'دفاية زيت قدرة 2000 وات' },
+      ];
+
+      for (const productData of productsData) {
+        try {
+          await storage.createProduct(productData);
+        } catch (error) {
+          // Ignore if already exists
+          console.log(`Product ${productData.name} might already exist`);
+        }
+      }
+
+      res.json({ message: "تم إدراج البيانات التجريبية بنجاح", categoriesCount: categoriesData.length, productsCount: productsData.length });
+    } catch (error) {
+      console.error("Insert test data error:", error);
+      res.status(500).json({ message: "خطأ في إدراج البيانات التجريبية" });
+    }
+  });
+
+  // Health check endpoint
+  app.get("/api/health", (req, res) => {
+    res.json({ 
+      status: "ok", 
+      timestamp: new Date().toISOString(),
+      message: "الخادم يعمل بنجاح" 
+    });
+  });
+
+  // Test page endpoint
+  app.get("/test", (req, res) => {
+    res.send(`
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار النظام</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-center mb-8 text-gray-800">اختبار نظام قطع الغيار</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- إدراج البيانات التجريبية -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">إدراج البيانات التجريبية</h2>
+                <button id="insertTestData" class="w-full bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors">
+                    إدراج البيانات
+                </button>
+                <div id="insertResult" class="mt-4 text-sm"></div>
+            </div>
+
+            <!-- اختبار الفئات والمنتجات -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">اختبار الفئات والمنتجات</h2>
+                <button id="testCategories" class="w-full bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition-colors">
+                    عرض الفئات والمنتجات
+                </button>
+                <div id="categoriesResult" class="mt-4 text-sm max-h-40 overflow-y-auto"></div>
+            </div>
+
+            <!-- اختبار قطع الغيار -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">اختبار قطع الغيار</h2>
+                <button id="testSpareParts" class="w-full bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg transition-colors">
+                    عرض قطع الغيار
+                </button>
+                <div id="sparePartsResult" class="mt-4 text-sm max-h-40 overflow-y-auto"></div>
+            </div>
+
+            <!-- حالة الخادم -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">حالة الخادم</h2>
+                <button id="checkServer" class="w-full bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors">
+                    فحص الخادم
+                </button>
+                <div id="serverResult" class="mt-4 text-sm"></div>
+            </div>
+        </div>
+
+        <!-- روابط سريعة -->
+        <div class="mt-8 bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">روابط سريعة للنظام</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <a href="/" target="_blank" class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg text-center transition-colors">
+                    النظام الرئيسي
+                </a>
+                <a href="/service-requests" target="_blank" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-center transition-colors">
+                    طلبات الصيانة
+                </a>
+                <a href="/categories" target="_blank" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-center transition-colors">
+                    الفئات
+                </a>
+                <a href="/inventory" target="_blank" class="bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg text-center transition-colors">
+                    المخزون
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = window.location.origin;
+
+        // إدراج البيانات التجريبية
+        document.getElementById('insertTestData').addEventListener('click', async () => {
+            const resultDiv = document.getElementById('insertResult');
+            resultDiv.innerHTML = '<div class="text-yellow-600">جاري إدراج البيانات...</div>';
+            
+            try {
+                const response = await fetch(BASE_URL + '/api/insert-test-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = '<div class="text-green-600">✅ تم إدراج البيانات بنجاح!</div>';
+                } else {
+                    resultDiv.innerHTML = '<div class="text-red-600">❌ خطأ: ' + result.message + '</div>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="text-red-600">❌ خطأ في الاتصال: ' + error.message + '</div>';
+            }
+        });
+
+        // اختبار الفئات والمنتجات
+        document.getElementById('testCategories').addEventListener('click', async () => {
+            const resultDiv = document.getElementById('categoriesResult');
+            resultDiv.innerHTML = '<div class="text-yellow-600">جاري تحميل البيانات...</div>';
+            
+            try {
+                const [categoriesResponse, productsResponse] = await Promise.all([
+                    fetch(BASE_URL + '/api/categories', { credentials: 'include' }),
+                    fetch(BASE_URL + '/api/products', { credentials: 'include' })
+                ]);
+                
+                const categories = await categoriesResponse.json();
+                const products = await productsResponse.json();
+                
+                let html = '<div class="text-green-600 mb-2">✅ الفئات (' + categories.length + ')</div>';
+                categories.forEach(cat => {
+                    const categoryProducts = products.filter(p => p.categoryId === cat.id);
+                    html += '<div class="mb-1"><strong>' + cat.name + '</strong> (' + categoryProducts.length + ' منتج)</div>';
+                });
+                
+                resultDiv.innerHTML = html;
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="text-red-600">❌ خطأ: ' + error.message + '</div>';
+            }
+        });
+
+        // اختبار قطع الغيار
+        document.getElementById('testSpareParts').addEventListener('click', async () => {
+            const resultDiv = document.getElementById('sparePartsResult');
+            resultDiv.innerHTML = '<div class="text-yellow-600">جاري تحميل البيانات...</div>';
+            
+            try {
+                const response = await fetch(BASE_URL + '/api/spare-parts', { credentials: 'include' });
+                const spareParts = await response.json();
+                
+                let html = '<div class="text-green-600 mb-2">✅ قطع الغيار (' + spareParts.length + ')</div>';
+                spareParts.slice(0, 10).forEach(part => {
+                    html += '<div class="mb-1">' + part.name + ' - ' + part.partNumber + '</div>';
+                });
+                if (spareParts.length > 10) {
+                    html += '<div class="text-gray-500">... و ' + (spareParts.length - 10) + ' قطعة أخرى</div>';
+                }
+                
+                resultDiv.innerHTML = html;
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="text-red-600">❌ خطأ: ' + error.message + '</div>';
+            }
+        });
+
+        // فحص حالة الخادم
+        document.getElementById('checkServer').addEventListener('click', async () => {
+            const resultDiv = document.getElementById('serverResult');
+            resultDiv.innerHTML = '<div class="text-yellow-600">جاري فحص الخادم...</div>';
+            
+            try {
+                const startTime = Date.now();
+                const response = await fetch(BASE_URL + '/api/health', { credentials: 'include' });
+                const endTime = Date.now();
+                const responseTime = endTime - startTime;
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = 
+                        '<div class="text-green-600">✅ الخادم يعمل بنجاح</div>' +
+                        '<div class="text-gray-500">زمن الاستجابة: ' + responseTime + 'ms</div>';
+                } else {
+                    resultDiv.innerHTML = '<div class="text-red-600">❌ مشكلة في الخادم</div>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="text-red-600">❌ الخادم غير متاح</div>';
+            }
+        });
+
+        // فحص تلقائي للخادم عند التحميل
+        window.addEventListener('load', () => {
+            document.getElementById('checkServer').click();
+        });
+    </script>
+</body>
+</html>
+    `);
+  });
+
+  // User Approval endpoints
+  app.get("/api/pending-users", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser || !["admin", "manager"].includes(currentUser.role)) {
+        return res.status(403).json({ message: "غير مصرح لك بالوصول" });
+      }
+
+      const pendingUsers = await storage.getPendingUsers();
+      res.json(pendingUsers);
+    } catch (error) {
+      console.error("Get pending users error:", error);
+      res.status(500).json({ message: "خطأ في جلب المستخدمين المعلقين" });
+    }
+  });
+
+  app.post("/api/approve-user/:userId", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser || !["admin", "manager"].includes(currentUser.role)) {
+        return res.status(403).json({ message: "غير مصرح لك بالموافقة" });
+      }
+
+      const { userId } = req.params;
+      const { role, centerId, warehouseId, notes } = req.body;
+
+      const approvalData = {
+        userId,
+        approvedBy: currentUser.id,
+        role,
+        centerId: centerId || null,
+        warehouseId: warehouseId || null,
+        notes
+      };
+
+      const updatedUser = await storage.approveUser(userId, approvalData);
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Approve user error:", error);
+      res.status(500).json({ message: "خطأ في الموافقة على المستخدم" });
+    }
+  });
+
+  // Warehouse-specific endpoints
+  app.get("/api/warehouse/:warehouseId/spare-parts", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول" });
+      }
+
+      const { warehouseId } = req.params;
+      
+      // Check if user has access to this warehouse
+      if (currentUser.role !== "admin" && currentUser.warehouseId !== warehouseId) {
+        return res.status(403).json({ message: "غير مصرح لك بالوصول لهذا المخزن" });
+      }
+
+      const spareParts = await storage.getWarehouseSpareParts(warehouseId);
+      res.json(spareParts);
+    } catch (error) {
+      console.error("Get warehouse spare parts error:", error);
+      res.status(500).json({ message: "خطأ في جلب قطع الغيار" });
+    }
+  });
+
+  app.get("/api/warehouse/:warehouseId/users", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser || !["admin", "warehouse_manager"].includes(currentUser.role)) {
+        return res.status(403).json({ message: "غير مصرح لك بالوصول" });
+      }
+
+      const { warehouseId } = req.params;
+      const users = await storage.getUsersByWarehouse(warehouseId);
+      res.json(users);
+    } catch (error) {
+      console.error("Get warehouse users error:", error);
+      res.status(500).json({ message: "خطأ في جلب مستخدمي المخزن" });
     }
   });
 

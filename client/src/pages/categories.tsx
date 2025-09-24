@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -216,6 +216,9 @@ export default function Categories() {
                 <DialogContent className="max-w-md">
                   <DialogHeader>
                     <DialogTitle>{editingCategory ? "تعديل الفئة" : "إضافة فئة جديدة"}</DialogTitle>
+                    <DialogDescription>
+                      {editingCategory ? "تعديل بيانات الفئة المحددة" : "إضافة فئة جديدة للمنتجات"}
+                    </DialogDescription>
                   </DialogHeader>
                   <form onSubmit={handleCategorySubmit} className="space-y-4">
                     <div>
@@ -345,6 +348,9 @@ export default function Categories() {
                 <DialogContent className="max-w-md">
                   <DialogHeader>
                     <DialogTitle>{editingProduct ? "تعديل المنتج" : "إضافة منتج جديد"}</DialogTitle>
+                    <DialogDescription>
+                      {editingProduct ? "تعديل بيانات المنتج المحدد" : "إضافة منتج جديد للفئة المحددة"}
+                    </DialogDescription>
                   </DialogHeader>
                   <form onSubmit={handleProductSubmit} className="space-y-4">
                     <div>

@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useWebSocket } from "@/hooks/use-websocket";
 import { apiGet, apiPost, apiPut, apiDelete } from "../lib/db";
 import { useAuth } from "../lib/auth";
 import { canCreate, canUpdate, canDelete } from "../lib/permissions";
@@ -23,6 +24,9 @@ export default function Users() {
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
 
+  // Enable real-time updates
+  const { isConnected } = useWebSocket();
+
   // Check permissions
   const canCreateUsers = currentUser ? canCreate(currentUser.role, 'users') : false;
   const canUpdateUsers = currentUser ? canUpdate(currentUser.role, 'users') : false;
@@ -36,6 +40,12 @@ export default function Users() {
   const { data: serviceCenters } = useQuery({
     queryKey: ['/api/service-centers'],
     queryFn: () => apiGet('/api/service-centers'),
+  });
+
+  const { data: serviceRequests } = useQuery({
+    queryKey: ['/api/service-requests'],
+    queryFn: () => apiGet('/api/service-requests'),
+    enabled: currentUser?.role === 'manager' || currentUser?.role === 'admin',
   });
 
   const createUserMutation = useMutation({
@@ -76,6 +86,19 @@ export default function Users() {
     },
   });
 
+  const toggleUserStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'active' | 'inactive' }) => 
+      apiPut(`/api/users/${id}`, { status }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/users'] });
+      const action = variables.status === 'active' ? 'تم تفعيل' : 'تم إلغاء تفعيل';
+      toast({ title: `${action} المستخدم بنجاح` });
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: "فشل في تغيير حالة المستخدم" });
+    },
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingUser) {
@@ -95,6 +118,26 @@ export default function Users() {
     if (confirm("هل أنت متأكد من حذف هذا المستخدم؟")) {
       deleteUserMutation.mutate(id);
     }
+  };
+
+  const handleToggleStatus = (user: User) => {
+    const newStatus = user.status === 'active' ? 'inactive' : 'active';
+    const actionText = newStatus === 'active' ? 'تفعيل' : 'إلغاء تفعيل';
+    
+    if (confirm(`هل أنت متأكد من ${actionText} هذا المستخدم؟`)) {
+      toggleUserStatusMutation.mutate({ id: user.id, status: newStatus });
+    }
+  };
+
+  const getTechnicianRequestsInfo = (technicianId: string) => {
+    if (!serviceRequests) return { total: 0, pending: 0, inProgress: 0 };
+    
+    const techRequests = serviceRequests.filter((req: any) => req.technicianId === technicianId);
+    return {
+      total: techRequests.length,
+      pending: techRequests.filter((req: any) => req.status === 'pending').length,
+      inProgress: techRequests.filter((req: any) => req.status === 'in_progress').length,
+    };
   };
 
   const filteredUsers = users?.filter((user: User) => {
@@ -271,6 +314,7 @@ export default function Users() {
                 <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">البريد الإلكتروني</th>
                 <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">الدور</th>
                 <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">مركز الخدمة</th>
+                <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">الطلبات المعينة</th>
                 <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">الحالة</th>
                 <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">الإجراءات</th>
               </tr>
@@ -278,13 +322,13 @@ export default function Users() {
             <tbody className="divide-y divide-border">
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8">
+                  <td colSpan={7} className="text-center py-8">
                     <div className="loading-spinner mx-auto"></div>
                   </td>
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <td colSpan={7} className="text-center py-8 text-muted-foreground">
                     لا توجد مستخدمين
                   </td>
                 </tr>
@@ -319,29 +363,102 @@ export default function Users() {
                       </span>
                     </td>
                     <td className="py-4 px-4">
-                      <span className={`status-badge status-${user.status === 'active' ? 'completed' : user.status === 'pending' ? 'pending' : 'cancelled'}`}>
-                        {user.status === 'active' ? 'نشط' : user.status === 'pending' ? 'في الانتظار' : 'غير نشط'}
-                      </span>
+                      {user.role === 'technician' ? (
+                        <div className="text-sm">
+                          {serviceRequests ? (
+                            (() => {
+                              const requestsInfo = getTechnicianRequestsInfo(user.id);
+                              return requestsInfo.total > 0 ? (
+                                <div className="space-y-1">
+                                  <div className="text-card-foreground font-medium">
+                                    {requestsInfo.total} طلب
+                                  </div>
+                                  <div className="flex space-x-2 space-x-reverse text-xs">
+                                    {requestsInfo.pending > 0 && (
+                                      <span className="bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded">
+                                        {requestsInfo.pending} انتظار
+                                      </span>
+                                    )}
+                                    {requestsInfo.inProgress > 0 && (
+                                      <span className="bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
+                                        {requestsInfo.inProgress} تنفيذ
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">لا توجد طلبات</span>
+                              );
+                            })()
+                          ) : (
+                            <span className="text-muted-foreground">جاري التحميل...</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex items-center space-x-2 space-x-reverse">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          user.status === 'active' 
+                            ? 'bg-green-100 text-green-800 border border-green-200' 
+                            : user.status === 'pending'
+                            ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                            : 'bg-red-100 text-red-800 border border-red-200'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                            user.status === 'active' ? 'bg-green-400' : 
+                            user.status === 'pending' ? 'bg-yellow-400' : 'bg-red-400'
+                          }`}></span>
+                          {user.status === 'active' ? 'نشط' : user.status === 'pending' ? 'في الانتظار' : 'غير نشط'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex items-center space-x-2 space-x-reverse">
+                        {/* Status Toggle Button */}
+                        {canUpdateUsers && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleToggleStatus(user)}
+                            className={`p-2 ${
+                              user.status === 'active' 
+                                ? 'text-orange-600 hover:bg-orange-50' 
+                                : 'text-green-600 hover:bg-green-50'
+                            }`}
+                            title={user.status === 'active' ? 'إلغاء التفعيل' : 'تفعيل المستخدم'}
+                            data-testid={`button-toggle-status-${user.id}`}
+                          >
+                            <i className={`bi ${
+                              user.status === 'active' ? 'bi-toggle-on' : 'bi-toggle-off'
+                            } text-sm`}></i>
+                          </Button>
+                        )}
+                        
+                        {/* Edit Button */}
                         {canUpdateUsers && (
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleEdit(user)}
                             className="p-2 text-chart-1 hover:bg-chart-1/10"
+                            title="تعديل المستخدم"
                             data-testid={`button-edit-user-${user.id}`}
                           >
                             <i className="bi bi-pencil text-sm"></i>
                           </Button>
                         )}
+                        
+                        {/* Delete Button */}
                         {canDeleteUsers && (
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDelete(user.id)}
                             className="p-2 text-destructive hover:bg-destructive/10"
+                            title="حذف المستخدم"
                             data-testid={`button-delete-user-${user.id}`}
                           >
                             <i className="bi bi-trash text-sm"></i>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "../../lib/auth";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [, setLocation] = useLocation();
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const { toast } = useToast();
+
+  // Redirect if user is already logged in
+  useEffect(() => {
+    if (user) {
+      if (user.role === 'customer') {
+        setLocation("/dashboard/service-requests");
+      } else {
+        setLocation("/dashboard");
+      }
+    }
+  }, [user, setLocation]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,14 +37,7 @@ export default function LoginPage() {
           title: "تم تسجيل الدخول بنجاح",
           description: "مرحباً بك في نظام إدارة مراكز الصيانة",
         });
-        
-        // Get user role to determine redirect
-        const userData = JSON.parse(localStorage.getItem('user') || '{}');
-        if (userData.role === 'customer') {
-          setLocation("/dashboard/service-requests");
-        } else {
-          setLocation("/dashboard");
-        }
+        // Navigation will be handled by the useEffect when user state updates
       } else {
         toast({
           variant: "destructive",

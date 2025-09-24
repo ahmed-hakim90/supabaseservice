@@ -1,19 +1,21 @@
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { db } from './db';
 import { 
   users, 
-  serviceCenters, 
-  customers, 
-  categories, 
-  products, 
-  serviceRequests, 
+  serviceCenters,
+  customers,
+  categories,
+  products,
+  serviceRequests,
   serviceRequestFollowUps,
+  serviceRequestFollowUpSpareParts,
   warehouses,
   spareParts,
   inventory,
   productInventory,
   partsTransfers,
-  activityLogs
+  activityLogs,
+  userApprovals
 } from '../shared/schema';
 import type { 
   User, InsertUser,
@@ -23,12 +25,15 @@ import type {
   Product, InsertProduct,
   ServiceRequest, InsertServiceRequest,
   ServiceRequestFollowUp, InsertServiceRequestFollowUp,
+  ServiceRequestFollowUpSparePart, InsertServiceRequestFollowUpSparePart,
   Warehouse, InsertWarehouse,
   SparePart, InsertSparePart,
   Inventory, InsertInventory,
   ProductInventory, InsertProductInventory,
   PartsTransfer, InsertPartsTransfer,
-  ActivityLog, InsertActivityLog
+  ActivityLog, InsertActivityLog,
+  UserApproval, InsertUserApproval,
+  insertSparePartSchema
 } from '../shared/schema';
 import type { IStorage } from './storage';
 
@@ -197,6 +202,27 @@ export class DrizzleStorage implements IStorage {
     return await db.select().from(serviceRequests).orderBy(desc(serviceRequests.createdAt));
   }
 
+  async getAllServiceRequestsWithFollowUps(): Promise<any[]> {
+    const requests = await db.select().from(serviceRequests).orderBy(desc(serviceRequests.createdAt));
+    
+    // Get follow-ups for each request
+    const requestsWithFollowUps = await Promise.all(
+      requests.map(async (request) => {
+        const followUps = await db.select()
+          .from(serviceRequestFollowUps)
+          .where(eq(serviceRequestFollowUps.serviceRequestId, request.id))
+          .orderBy(desc(serviceRequestFollowUps.createdAt));
+        
+        return {
+          ...request,
+          followUps
+        };
+      })
+    );
+
+    return requestsWithFollowUps;
+  }
+
   async getServiceRequest(id: string): Promise<ServiceRequest | undefined> {
     const result = await db.select().from(serviceRequests).where(eq(serviceRequests.id, id));
     return result[0];
@@ -235,6 +261,89 @@ export class DrizzleStorage implements IStorage {
       ...followUpData,
       createdAt: new Date()
     }).returning();
+    return result[0];
+  }
+
+  // Service Request Follow-up Spare Parts
+  async addSparePartsToFollowUp(followUpId: string, spareParts: InsertServiceRequestFollowUpSparePart[]): Promise<ServiceRequestFollowUpSparePart[]> {
+    if (spareParts.length === 0) return [];
+    
+    const sparePartsWithFollowUpId = spareParts.map(part => ({
+      ...part,
+      followUpId,
+      createdAt: new Date()
+    }));
+    
+    const result = await db.insert(serviceRequestFollowUpSpareParts)
+      .values(sparePartsWithFollowUpId)
+      .returning();
+    return result;
+  }
+
+  async getFollowUpSpareParts(followUpId: string): Promise<ServiceRequestFollowUpSparePart[]> {
+    return await db.select().from(serviceRequestFollowUpSpareParts)
+      .where(eq(serviceRequestFollowUpSpareParts.followUpId, followUpId));
+  }
+
+  async getFollowUpWithSpareParts(followUpId: string): Promise<{
+    followUp: ServiceRequestFollowUp | undefined;
+    spareParts: (ServiceRequestFollowUpSparePart & { sparePart: SparePart })[];
+    serviceRequest?: ServiceRequest;
+  }> {
+    const followUp = await db.select().from(serviceRequestFollowUps)
+      .where(eq(serviceRequestFollowUps.id, followUpId))
+      .then(result => result[0]);
+
+    let serviceRequest;
+    if (followUp) {
+      serviceRequest = await db.select().from(serviceRequests)
+        .where(eq(serviceRequests.id, followUp.serviceRequestId))
+        .then(result => result[0]);
+    }
+
+    const sparePartsWithDetails = await db.select({
+      id: serviceRequestFollowUpSpareParts.id,
+      followUpId: serviceRequestFollowUpSpareParts.followUpId,
+      sparePartId: serviceRequestFollowUpSpareParts.sparePartId,
+      quantityUsed: serviceRequestFollowUpSpareParts.quantityUsed,
+      notes: serviceRequestFollowUpSpareParts.notes,
+      createdAt: serviceRequestFollowUpSpareParts.createdAt,
+      sparePart: spareParts
+    })
+    .from(serviceRequestFollowUpSpareParts)
+    .leftJoin(spareParts, eq(serviceRequestFollowUpSpareParts.sparePartId, spareParts.id))
+    .where(eq(serviceRequestFollowUpSpareParts.followUpId, followUpId));
+
+    return {
+      followUp,
+      spareParts: sparePartsWithDetails as any,
+      serviceRequest
+    };
+  }
+
+  async removeSparePartsFromFollowUp(followUpId: string, sparePartIds: string[]) {
+    return await db
+      .delete(serviceRequestFollowUpSpareParts)
+      .where(
+        and(
+          eq(serviceRequestFollowUpSpareParts.followUpId, followUpId),
+          inArray(serviceRequestFollowUpSpareParts.sparePartId, sparePartIds)
+        )
+      );
+  }
+
+  // Spare Parts
+  async getAllSpareParts(): Promise<SparePart[]> {
+    return await db.select().from(spareParts);
+  }
+
+  async getSparePart(id: string): Promise<SparePart | undefined> {
+    const result = await db.select().from(spareParts).where(eq(spareParts.id, id));
+    return result[0];
+  }
+
+  async createSparePart(sparePartData: any): Promise<SparePart> {
+    const result = await db.insert(spareParts).values(sparePartData).returning();
     return result[0];
   }
 
@@ -306,7 +415,13 @@ export class DrizzleStorage implements IStorage {
   }
 
   // Product Inventory
-  async getProductInventory(warehouseId: string): Promise<ProductInventory[]> {
+  async getProductInventory(id: string): Promise<ProductInventory | undefined> {
+    const result = await db.select().from(productInventory)
+      .where(eq(productInventory.id, id));
+    return result[0];
+  }
+
+  async getProductInventoryByWarehouse(warehouseId: string): Promise<ProductInventory[]> {
     return await db.select().from(productInventory)
       .where(eq(productInventory.warehouseId, warehouseId));
   }
@@ -343,6 +458,63 @@ export class DrizzleStorage implements IStorage {
 
   async deleteProductInventory(id: string): Promise<void> {
     await db.delete(productInventory).where(eq(productInventory.id, id));
+  }
+
+  // User Approvals
+  async createUserApproval(approvalData: InsertUserApproval): Promise<UserApproval> {
+    const result = await db.insert(userApprovals).values(approvalData).returning();
+    return result[0];
+  }
+
+  async getUserApprovals(userId: string): Promise<UserApproval[]> {
+    return await db.select().from(userApprovals).where(eq(userApprovals.userId, userId));
+  }
+
+  async getPendingUsers(): Promise<User[]> {
+    return await db.select().from(users).where(eq(users.status, 'pending'));
+  }
+
+  async approveUser(userId: string, approvalData: InsertUserApproval): Promise<User> {
+    // Create approval record
+    await this.createUserApproval(approvalData);
+    
+    // Update user status and details
+    const result = await db.update(users)
+      .set({
+        status: 'active',
+        role: approvalData.role,
+        centerId: approvalData.centerId || null,
+        warehouseId: approvalData.warehouseId || null,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    
+    return result[0];
+  }
+
+  async getUsersByWarehouse(warehouseId: string): Promise<User[]> {
+    return await db.select().from(users).where(eq(users.warehouseId, warehouseId));
+  }
+
+  async getWarehouseSpareParts(warehouseId: string): Promise<any[]> {
+    const result = await db
+      .select({
+        sparePart: spareParts,
+        inventory: inventory,
+        category: categories
+      })
+      .from(inventory)
+      .innerJoin(spareParts, eq(inventory.sparePartId, spareParts.id))
+      .leftJoin(categories, eq(spareParts.categoryId, categories.id))
+      .where(eq(inventory.warehouseId, warehouseId));
+    
+    return result.map(item => ({
+      ...item.sparePart,
+      quantity: item.inventory.quantity,
+      minQuantity: item.inventory.minQuantity,
+      category: item.category
+    }));
   }
 }
 

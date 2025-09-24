@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -12,29 +12,34 @@
   --accent: hsl(0, 0%, 100%);
   --border: #e8e8e8;
   --radius: 0.8rem;
-  --shadow: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00), 0px 1px 2px -1px hsl(9, 75%, 61% / 0.00);
+  --shadow: 0px 2px 0px 0px hsl(9, 75%, 61% / 0),
+    0px 1px 2px -1px hsl(9, 75%, 61% / 0);
   --chart-1: hsl(203.8863, 88.2845%, 53.1373%);
   --chart-2: hsl(159.7826, 100%, 36.0784%);
-  --chart-3: hsl(42.0290, 92.8251%, 56.2745%);
+  --chart-3: hsl(42.029, 92.8251%, 56.2745%);
   --chart-4: hsl(147.1429, 78.5047%, 41.9608%);
-  --chart-5: hsl(341.4894, 75.2000%, 50.9804%);
+  --chart-5: hsl(341.4894, 75.2%, 50.9804%);
   --popover: hsl(45, 25%, 97%);
   --primary: #eb1a4e;
   --sidebar: hsl(45, 25%, 97%);
   --spacing: 0.25rem;
   --font-mono: Menlo, monospace;
-  --font-sans: 'Poppins', sans-serif;
+  --font-sans: "Poppins", sans-serif;
   --secondary: #c4c4c4;
-  --shadow-lg: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00), 0px 4px 6px -1px hsl(9, 75%, 61% / 0.00);
-  --shadow-md: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00), 0px 2px 4px -1px hsl(9, 75%, 61% / 0.00);
-  --shadow-sm: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00), 0px 1px 2px -1px hsl(9, 75%, 61% / 0.00);
-  --shadow-xl: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00), 0px 8px 10px -1px hsl(9, 75%, 61% / 0.00);
-  --shadow-xs: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00);
+  --shadow-lg: 0px 2px 0px 0px hsl(9, 75%, 61% / 0),
+    0px 4px 6px -1px hsl(9, 75%, 61% / 0);
+  --shadow-md: 0px 2px 0px 0px hsl(9, 75%, 61% / 0),
+    0px 2px 4px -1px hsl(9, 75%, 61% / 0);
+  --shadow-sm: 0px 2px 0px 0px hsl(9, 75%, 61% / 0),
+    0px 1px 2px -1px hsl(9, 75%, 61% / 0);
+  --shadow-xl: 0px 2px 0px 0px hsl(9, 75%, 61% / 0),
+    0px 8px 10px -1px hsl(9, 75%, 61% / 0);
+  --shadow-xs: 0px 2px 0px 0px hsl(9, 75%, 61% / 0);
   --background: #f0f0f0;
-  --font-serif: 'Poppins', sans-serif;
+  --font-serif: "Poppins", sans-serif;
   --foreground: #1a1a1a;
-  --shadow-2xl: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00);
-  --shadow-2xs: 0px 2px 0px 0px hsl(9, 75%, 61% / 0.00);
+  --shadow-2xl: 0px 2px 0px 0px hsl(9, 75%, 61% / 0);
+  --shadow-2xs: 0px 2px 0px 0px hsl(9, 75%, 61% / 0);
   --destructive: hsl(0, 0%, 0%);
   --sidebar-ring: hsl(9, 75%, 61%);
   --sidebar-accent: hsl(25, 45%, 80%);
@@ -62,9 +67,9 @@
   --border: hsl(20, 14%, 15%);
   --chart-1: hsl(203.8863, 88.2845%, 53.1373%);
   --chart-2: hsl(159.7826, 100%, 36.0784%);
-  --chart-3: hsl(42.0290, 92.8251%, 56.2745%);
+  --chart-3: hsl(42.029, 92.8251%, 56.2745%);
   --chart-4: hsl(147.1429, 78.5047%, 41.9608%);
-  --chart-5: hsl(341.4894, 75.2000%, 50.9804%);
+  --chart-5: hsl(341.4894, 75.2%, 50.9804%);
   --popover: hsl(20, 14%, 4%);
   --primary: hsl(9, 75%, 61%);
   --sidebar: hsl(20, 14%, 8%);
@@ -95,17 +100,17 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Poppins', sans-serif;
+    font-family: "Poppins", sans-serif;
   }
 }
 
 @layer components {
   .sidebar-link.active {
-    background-color: hsl(var(--primary) / 0.1);
-    border-left: 3px solid hsl(var(--primary));
+    background-color: var(--primary);
+
     color: hsl(var(--primary));
   }
-  
+
   .notification-badge {
     position: absolute;
     top: -8px;
@@ -121,7 +126,7 @@
     align-items: center;
     font-weight: 600;
   }
-  
+
   .status-badge {
     padding: 4px 12px;
     border-radius: 12px;
@@ -130,39 +135,39 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
-  
+
   .status-pending {
     background-color: hsl(43, 96%, 56% / 0.1);
     color: hsl(43, 96%, 45%);
     border: 1px solid hsl(43, 96%, 56% / 0.2);
   }
-  
+
   .status-in-progress {
     background-color: hsl(var(--chart-1) / 0.1);
     color: hsl(var(--chart-1));
     border: 1px solid hsl(var(--chart-1) / 0.2);
   }
-  
+
   .status-completed {
     background-color: hsl(var(--chart-2) / 0.1);
     color: hsl(var(--chart-2));
     border: 1px solid hsl(var(--chart-2) / 0.2);
   }
-  
+
   .status-cancelled {
     background-color: hsl(var(--destructive) / 0.1);
     color: hsl(var(--destructive));
     border: 1px solid hsl(var(--destructive) / 0.2);
   }
-  
+
   .hover-scale {
     transition: transform 0.2s ease-in-out;
   }
-  
+
   .hover-scale:hover {
     transform: scale(1.02);
   }
-  
+
   .loading-spinner {
     border: 2px solid hsl(var(--muted));
     border-top: 2px solid hsl(var(--primary));
@@ -171,10 +176,14 @@
     height: 20px;
     animation: spin 1s linear infinite;
   }
-  
+
   @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
   }
 }
 
@@ -183,7 +192,7 @@
     transform: translateX(100%);
     transition: transform 0.3s ease-in-out;
   }
-  
+
   .sidebar.open {
     transform: translateX(0);
   }

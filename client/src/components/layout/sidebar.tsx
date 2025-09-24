@@ -10,13 +10,18 @@ interface SidebarProps {
 
 const menuItems = [
   { id: "dashboard", path: "/dashboard", icon: "bi-speedometer2", label: "لوحة التحكم" },
-  { id: "users", path: "/dashboard/users", icon: "bi-people", label: "المستخدمين" },
-  { id: "roles", path: "/dashboard/roles", icon: "bi-shield-check", label: "الأدوار والصلاحيات" },
+  { id: "user-management", path: "/dashboard/user-management", icon: "bi-people-fill", label: "إدارة المستخدمين" },
+  // { id: "users", path: "/dashboard/users", icon: "bi-people", label: "المستخدمين" },
+  // { id: "user-approvals", path: "/dashboard/user-approvals", icon: "bi-check-circle", label: "الموافقات" },
+  // { id: "roles", path: "/dashboard/roles", icon: "bi-shield-check", label: "الأدوار والصلاحيات" },
   { id: "centers", path: "/dashboard/centers", icon: "bi-building", label: "مراكز الخدمة" },
-  { id: "warehouses", path: "/dashboard/warehouses", icon: "bi-shop", label: "المخازن" },
-  { id: "inventory", path: "/dashboard/inventory", icon: "bi-box-seam", label: "المخزون" },
+  { id: "warehouse-management", path: "/dashboard/warehouse-management", icon: "bi-buildings", label: "إدارة المخازن والمخزون" },
+  // { id: "warehouses", path: "/dashboard/warehouses", icon: "bi-shop", label: "المخازن" },
+  // { id: "inventory", path: "/dashboard/inventory", icon: "bi-box-seam", label: "المخزون" },
+  { id: "products-management", path: "/dashboard/products-management", icon: "bi-box", label: "إدارة المنتجات وقطع الغيار" },
+  // { id: "spare-parts-management", path: "/dashboard/spare-parts-management", icon: "bi-gear", label: "قطع الغيار" },
   { id: "customers", path: "/dashboard/customers", icon: "bi-person-badge", label: "العملاء" },
-  { id: "categories", path: "/dashboard/categories", icon: "bi-diagram-3", label: "الفئات والمنتجات" },
+  // { id: "categories", path: "/dashboard/categories", icon: "bi-diagram-3", label: "الفئات والمنتجات" },
   { id: "service-requests", path: "/dashboard/service-requests", icon: "bi-tools", label: "طلبات الصيانة" },
   { id: "transfers", path: "/dashboard/transfers", icon: "bi-arrow-left-right", label: "تحويل قطع الغيار" },
   { id: "reports", path: "/dashboard/reports", icon: "bi-graph-up", label: "التقارير" },
@@ -48,7 +53,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             <Button
               key={item.id}
               variant="ghost"
-              className={`sidebar-link w-full justify-start text-right ${location === item.path ? 'active' : ''}`}
+              className={`sidebar-link w-full justify-start text-right  ${location === item.path ? 'active' : ''}`}
               onClick={() => handleNavigation(item.path)}
               data-testid={`nav-${item.id}`}
             >

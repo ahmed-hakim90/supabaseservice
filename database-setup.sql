@@ -15,6 +15,7 @@ CREATE TABLE users (
   role user_role NOT NULL DEFAULT 'customer',
   status user_status NOT NULL DEFAULT 'pending',
   center_id UUID,
+  warehouse_id UUID,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -108,8 +109,9 @@ CREATE TABLE spare_parts (
   name TEXT NOT NULL,
   part_number TEXT UNIQUE,
   category_id UUID,
+  product_id UUID,
+  price INTEGER,
   description TEXT,
-  unit_price INTEGER,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -188,12 +190,36 @@ INSERT INTO warehouses (name, location, center_id) VALUES
 ('مخزن الرياض الرئيسي', 'الرياض - المستودعات الرئيسية', (SELECT id FROM service_centers WHERE name = 'مركز الرياض الرئيسي')),
 ('مخزن جدة الفرعي', 'جدة - منطقة المستودعات', (SELECT id FROM service_centers WHERE name = 'مركز جدة'));
 
--- Create sample service request
-INSERT INTO service_requests (request_number, customer_id, product_id, device_name, issue, center_id, status) VALUES
-('SR-2024-001', 
- (SELECT id FROM customers WHERE full_name = 'خالد السعيد'), 
- (SELECT id FROM products WHERE name = 'غسالة أتوماتيك'), 
- 'غسالة أتوماتيك', 
- 'لا تعمل بشكل صحيح', 
- (SELECT id FROM service_centers WHERE name = 'مركز الرياض الرئيسي'), 
- 'in_progress');
+-- Create user_approvals table
+CREATE TABLE user_approvals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  approved_by UUID NOT NULL REFERENCES users(id),
+  role user_role NOT NULL,
+  center_id UUID,
+  warehouse_id UUID,
+  notes TEXT,
+  approved_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Create indexes for better performance
+CREATE INDEX idx_user_approvals_user_id ON user_approvals(user_id);
+CREATE INDEX idx_user_approvals_approved_by ON user_approvals(approved_by);
+CREATE INDEX idx_users_warehouse_id ON users(warehouse_id); 
+
+-- Insert sample spare parts linked to products
+INSERT INTO spare_parts (name, part_number, category_id, product_id, price, description) VALUES
+-- قطع غيار لمكيف شباك سوكاني
+('مروحة المكيف', 'AC-FAN-001', (SELECT id FROM categories WHERE name = 'أجهزة المنزل'), (SELECT id FROM products WHERE name = 'مكيف هواء'), 150, 'مروحة داخلية للمكيف'),
+('مكثف المكيف', 'AC-COND-001', (SELECT id FROM categories WHERE name = 'أجهزة المنزل'), (SELECT id FROM products WHERE name = 'مكيف هواء'), 300, 'مكثف خارجي للمكيف'),
+('لوحة تحكم المكيف', 'AC-BOARD-001', (SELECT id FROM categories WHERE name = 'أجهزة المنزل'), (SELECT id FROM products WHERE name = 'مكيف هواء'), 200, 'لوحة إلكترونية للتحكم'),
+
+-- قطع غيار لغسالة أتوماتيك
+('محرك الغسالة', 'WM-MOTOR-001', (SELECT id FROM categories WHERE name = 'أجهزة المنزل'), (SELECT id FROM products WHERE name = 'غسالة أتوماتيك'), 400, 'محرك كهربائي للغسالة'),
+('مضخة الغسالة', 'WM-PUMP-001', (SELECT id FROM categories WHERE name = 'أجهزة المنزل'), (SELECT id FROM products WHERE name = 'غسالة أتوماتيك'), 180, 'مضخة صرف المياه'),
+('حساس الغسالة', 'WM-SENSOR-001', (SELECT id FROM categories WHERE name = 'أجهزة المنزل'), (SELECT id FROM products WHERE name = 'غسالة أتوماتيك'), 120, 'حساس مستوى المياه'),
+
+-- قطع غيار عامة (غير مرتبطة بمنتج محدد)
+('كيبل كهربائي 3 متر', 'CABLE-3M', NULL, NULL, 50, 'كيبل كهربائي معزول'),
+('مفتاح كهربائي', 'SWITCH-001', NULL, NULL, 25, 'مفتاح تشغيل/إيقاف'),
+('صمام غاز', 'VALVE-GAS-001', NULL, NULL, 75, 'صمام أمان للغاز');

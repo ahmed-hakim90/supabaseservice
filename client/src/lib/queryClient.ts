@@ -3,6 +3,11 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
+    // Don't log 401 errors to console as they're expected when not logged in
+    if (res.status === 401) {
+      throw new Error(`${res.status}: ${text}`);
+    }
+    console.error(`API Error ${res.status}:`, text);
     throw new Error(`${res.status}: ${text}`);
   }
 }

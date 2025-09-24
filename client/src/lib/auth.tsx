@@ -15,12 +15,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing session
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-    setIsLoading(false);
+    // Check for existing session from server
+    const checkSession = async () => {
+      try {
+        const response = await fetch('/api/auth/me', {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+          localStorage.setItem('user', JSON.stringify(userData));
+        } else if (response.status === 401) {
+          // User is not logged in - this is normal, not an error
+          localStorage.removeItem('user');
+          setUser(null);
+        } else {
+          // Other errors
+          console.error('Session check failed:', response.status, response.statusText);
+          localStorage.removeItem('user');
+          setUser(null);
+        }
+      } catch (error) {
+        console.error('Session check error:', error);
+        localStorage.removeItem('user');
+        setUser(null);
+        // If server is not available, try to use localStorage as fallback
+        const savedUser = localStorage.getItem('user');
+        if (savedUser) {
+          try {
+            setUser(JSON.parse(savedUser));
+          } catch (parseError) {
+            localStorage.removeItem('user');
+          }
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkSession();
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
@@ -29,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -44,9 +78,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('user');
+  const logout = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include'
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setUser(null);
+      localStorage.removeItem('user');
+    }
   };
 
   return (

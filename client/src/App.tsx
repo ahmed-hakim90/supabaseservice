@@ -22,8 +22,13 @@ import Reports from "./pages/reports";
 import Activities from "./pages/activities";
 import Roles from "./pages/roles";
 import Settings from "./pages/settings";
+import UserApprovals from "./pages/user-approvals";
+import UserManagement from "./pages/user-management";
+import ProductsManagement from "./pages/products-management";
+import WarehouseManagement from "./pages/warehouse-management";
+import SparePartsManagement from "./pages/spare-parts-management";
 import DataManagement from "./pages/data-management";
-import NotFound from "@/pages/not-found";
+import NotFound from "./pages/not-found";
 
 
 function Router() {
@@ -40,9 +45,33 @@ function Router() {
         </DashboardLayout>
       </Route>
       
+      <Route path="/dashboard/user-management">
+        <DashboardLayout>
+          <UserManagement />
+        </DashboardLayout>
+      </Route>
+
       <Route path="/dashboard/users">
         <DashboardLayout>
           <Users />
+        </DashboardLayout>
+      </Route>
+
+      <Route path="/dashboard/user-approvals">
+        <DashboardLayout>
+          <UserApprovals />
+        </DashboardLayout>
+      </Route>
+
+      <Route path="/dashboard/products-management">
+        <DashboardLayout>
+          <ProductsManagement />
+        </DashboardLayout>
+      </Route>
+
+      <Route path="/dashboard/spare-parts-management">
+        <DashboardLayout>
+          <SparePartsManagement />
         </DashboardLayout>
       </Route>
       
@@ -55,6 +84,12 @@ function Router() {
       <Route path="/dashboard/centers">
         <DashboardLayout>
           <Centers />
+        </DashboardLayout>
+      </Route>
+      
+      <Route path="/dashboard/warehouse-management">
+        <DashboardLayout>
+          <WarehouseManagement />
         </DashboardLayout>
       </Route>
       

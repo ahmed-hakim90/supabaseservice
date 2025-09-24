@@ -13,12 +13,111 @@ import type {
   PartsTransfer, InsertPartsTransfer,
   ActivityLog, InsertActivityLog
 } from "@shared/schema";
+
+export interface IStorage {
+  // Users
+  getUsers(): Promise<User[]>;
+  getUser(id: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, user: Partial<User>): Promise<User>;
+  deleteUser(id: string): Promise<void>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  
+  // Service Centers
+  getServiceCenters(): Promise<ServiceCenter[]>;
+  getServiceCenter(id: string): Promise<ServiceCenter | undefined>;
+  createServiceCenter(center: InsertServiceCenter): Promise<ServiceCenter>;
+  updateServiceCenter(id: string, center: Partial<ServiceCenter>): Promise<ServiceCenter>;
+  deleteServiceCenter(id: string): Promise<void>;
+  
+  // Customers
+  getCustomers(): Promise<Customer[]>;
+  getCustomer(id: string): Promise<Customer | undefined>;
+  createCustomer(customer: InsertCustomer): Promise<Customer>;
+  updateCustomer(id: string, customer: Partial<Customer>): Promise<Customer>;
+  deleteCustomer(id: string): Promise<void>;
+  
+  // Categories
+  getCategories(): Promise<Category[]>;
+  getCategory(id: string): Promise<Category | undefined>;
+  createCategory(category: InsertCategory): Promise<Category>;
+  updateCategory(id: string, category: Partial<Category>): Promise<Category>;
+  deleteCategory(id: string): Promise<void>;
+  
+  // Products
+  getProducts(): Promise<Product[]>;
+  getProduct(id: string): Promise<Product | undefined>;
+  createProduct(product: InsertProduct): Promise<Product>;
+  updateProduct(id: string, product: Partial<Product>): Promise<Product>;
+  deleteProduct(id: string): Promise<void>;
+  
+  // Service Requests
+  getServiceRequests(): Promise<ServiceRequest[]>;
+  getServiceRequest(id: string): Promise<ServiceRequest | undefined>;
+  createServiceRequest(request: InsertServiceRequest): Promise<ServiceRequest>;
+  updateServiceRequest(id: string, request: Partial<ServiceRequest>): Promise<ServiceRequest>;
+  deleteServiceRequest(id: string): Promise<void>;
+  
+  // Service Request Follow-ups
+  getServiceRequestFollowUps(serviceRequestId: string): Promise<ServiceRequestFollowUp[]>;
+  getServiceRequestFollowUp(id: string): Promise<ServiceRequestFollowUp | undefined>;
+  createServiceRequestFollowUp(followUp: InsertServiceRequestFollowUp): Promise<ServiceRequestFollowUp>;
+  updateServiceRequestFollowUp(id: string, followUp: Partial<ServiceRequestFollowUp>): Promise<ServiceRequestFollowUp>;
+  deleteServiceRequestFollowUp(id: string): Promise<void>;
+  
+  // Warehouses
+  getWarehouses(): Promise<Warehouse[]>;
+  getWarehouse(id: string): Promise<Warehouse | undefined>;
+  createWarehouse(warehouse: InsertWarehouse): Promise<Warehouse>;
+  updateWarehouse(id: string, warehouse: Partial<Warehouse>): Promise<Warehouse>;
+  deleteWarehouse(id: string): Promise<void>;
+  
+  // Spare Parts
+  getSpareParts(): Promise<SparePart[]>;
+  getSparePart(id: string): Promise<SparePart | undefined>;
+  createSparePart(sparePart: InsertSparePart): Promise<SparePart>;
+  updateSparePart(id: string, sparePart: Partial<SparePart>): Promise<SparePart>;
+  deleteSparePart(id: string): Promise<void>;
+  
+  // Inventory
+  getInventory(): Promise<Inventory[]>;
+  getInventoryItem(id: string): Promise<Inventory | undefined>;
+  createInventoryItem(item: InsertInventory): Promise<Inventory>;
+  updateInventoryItem(id: string, item: Partial<Inventory>): Promise<Inventory>;
+  deleteInventoryItem(id: string): Promise<void>;
+  
+  // Product Inventory
+  getProductInventory(id: string): Promise<ProductInventory | undefined>;
+  createProductInventoryItem(item: InsertProductInventory): Promise<ProductInventory>;
+  updateProductInventoryItem(id: string, item: Partial<ProductInventory>): Promise<ProductInventory>;
+  deleteProductInventoryItem(id: string): Promise<void>;
+  
+  // Parts Transfers
+  getPartsTransfers(): Promise<PartsTransfer[]>;
+  getPartsTransfer(id: string): Promise<PartsTransfer | undefined>;
+  createPartsTransfer(transfer: InsertPartsTransfer): Promise<PartsTransfer>;
+  updatePartsTransfer(id: string, transfer: Partial<PartsTransfer>): Promise<PartsTransfer>;
+  deletePartsTransfer(id: string): Promise<void>;
+  
+  // Activity Logs
+  getActivityLogs(): Promise<ActivityLog[]>;
+  getActivityLog(id: string): Promise<ActivityLog | undefined>;
+  createActivityLog(log: InsertActivityLog): Promise<ActivityLog>;
+  
+  // Additional methods
+  createUserApproval(approvalData: any): Promise<any>;
+  getUserApprovals(userId: string): Promise<any[]>;
+  getPendingUsers(): Promise<User[]>;
+  approveUser(userId: string, approvalData: any): Promise<User>;
+  getUsersByWarehouse(warehouseId: string): Promise<User[]>;
+  getWarehouseSpareParts(warehouseId: string): Promise<any[]>;
+}
 import { db } from "./db";
 import { 
   users, serviceCenters, customers, categories, products, 
   serviceRequests, serviceRequestFollowUps, warehouses, 
   spareParts, inventory, productInventory, partsTransfers, 
-  activityLogs 
+  activityLogs, userApprovals
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -85,15 +184,21 @@ export interface IStorage {
   // Activity Logs
   logActivity(activity: InsertActivityLog): Promise<ActivityLog>;
 
-  // Product Inventory
-  getProductInventory(warehouseId: string): Promise<ProductInventory[]>;
-  getProductInventoryByProduct(productId: string): Promise<ProductInventory[]>;
-  getProductInventoryItem(warehouseId: string, productId: string): Promise<ProductInventory | undefined>;
-  createProductInventory(inventory: InsertProductInventory): Promise<ProductInventory>;
-  updateProductInventory(id: string, inventory: Partial<InsertProductInventory>): Promise<ProductInventory>;
+    // Product Inventory
+  getAllProductInventory(): Promise<ProductInventory[]>;
+  getProductInventory(id: string): Promise<ProductInventory | undefined>;
+  createProductInventory(inventoryData: InsertProductInventory): Promise<ProductInventory>;
+  updateProductInventory(id: string, inventoryData: Partial<InsertProductInventory>): Promise<ProductInventory>;
   deleteProductInventory(id: string): Promise<void>;
-}
 
+  // User Approvals
+  createUserApproval(approvalData: any): Promise<any>;
+  getUserApprovals(userId: string): Promise<any[]>;
+  getPendingUsers(): Promise<User[]>;
+  approveUser(userId: string, approvalData: any): Promise<User>;
+  getUsersByWarehouse(warehouseId: string): Promise<User[]>;
+  getWarehouseSpareParts(warehouseId: string): Promise<any[]>;
+}
 
 export class DatabaseStorage implements IStorage {
   constructor() {
@@ -361,7 +466,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Product Inventory
-  async getProductInventory(warehouseId: string): Promise<ProductInventory[]> {
+  async getProductInventory(id: string): Promise<ProductInventory | undefined> {
+    const result = await db.select().from(productInventory)
+      .where(eq(productInventory.id, id));
+    return result[0];
+  }
+
+  async getProductInventoryByWarehouse(warehouseId: string): Promise<ProductInventory[]> {
     return await db.select().from(productInventory)
       .where(eq(productInventory.warehouseId, warehouseId))
       .orderBy(desc(productInventory.updatedAt));
@@ -397,6 +508,65 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProductInventory(id: string): Promise<void> {
     await db.delete(productInventory).where(eq(productInventory.id, id));
+  }
+
+  // User Approvals
+  async createUserApproval(approvalData: any): Promise<any> {
+    const [approval] = await db.insert(userApprovals).values(approvalData).returning();
+    return approval;
+  }
+
+  async getUserApprovals(userId: string): Promise<any[]> {
+    return await db.select().from(userApprovals).where(eq(userApprovals.userId, userId));
+  }
+
+  async getPendingUsers(): Promise<User[]> {
+    return await db.select().from(users).where(eq(users.status, 'pending'));
+  }
+
+  async approveUser(userId: string, approvalData: any): Promise<User> {
+    // Create approval record
+    await this.createUserApproval(approvalData);
+    
+    // Update user status and details
+    const [updatedUser] = await db
+      .update(users)
+      .set({
+        status: 'active',
+        role: approvalData.role,
+        centerId: approvalData.centerId || null,
+        warehouseId: approvalData.warehouseId || null,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    
+    if (!updatedUser) throw new Error('User not found');
+    return updatedUser;
+  }
+
+  async getUsersByWarehouse(warehouseId: string): Promise<User[]> {
+    return await db.select().from(users).where(eq(users.warehouseId, warehouseId));
+  }
+
+  async getWarehouseSpareParts(warehouseId: string): Promise<any[]> {
+    const result = await db
+      .select({
+        sparePart: spareParts,
+        inventory: inventory,
+        category: categories
+      })
+      .from(inventory)
+      .innerJoin(spareParts, eq(inventory.sparePartId, spareParts.id))
+      .leftJoin(categories, eq(spareParts.categoryId, categories.id))
+      .where(eq(inventory.warehouseId, warehouseId));
+    
+    return result.map(item => ({
+      ...item.sparePart,
+      quantity: item.inventory.quantity,
+      minQuantity: item.inventory.minQuantity,
+      category: item.category
+    }));
   }
 }
 

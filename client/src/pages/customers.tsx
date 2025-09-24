@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useWebSocket } from "@/hooks/use-websocket";
 import { apiGet, apiPost, apiPut, apiDelete } from "../lib/db";
 import type { Customer, InsertCustomer } from "@shared/schema";
 
@@ -17,6 +18,9 @@ export default function Customers() {
   const [formData, setFormData] = useState<Partial<InsertCustomer>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Enable real-time updates
+  const { isConnected } = useWebSocket();
 
   const { data: customers, isLoading } = useQuery({
     queryKey: ['/api/customers'],

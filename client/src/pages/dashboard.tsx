@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useWebSocket } from "@/hooks/use-websocket";
 import { apiGet } from "../lib/db";
 import { useAuth } from "../lib/auth";
 import { canAccessPage } from "../lib/permissions";
@@ -9,6 +10,9 @@ import { canAccessPage } from "../lib/permissions";
 export default function Dashboard() {
   const { user: currentUser } = useAuth();
   const [, setLocation] = useLocation();
+
+  // Enable real-time updates
+  const { isConnected } = useWebSocket();
 
   // Redirect customers away from dashboard
   useEffect(() => {
@@ -248,7 +252,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentRequests?.length ? recentRequests.map((request: any) => (
+              {recentRequests?.length ? recentRequests.slice(0,5).map((request: any) => (
                 <div key={request.id} className="flex items-center justify-between p-4 bg-muted rounded-lg">
                   <div className="flex items-center space-x-4 space-x-reverse">
                     <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
@@ -284,18 +288,18 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentActivities?.length ? recentActivities.map((activity: any) => (
-                <div key={activity.id} className="flex items-start space-x-4 space-x-reverse">
-                  <div className="w-2 h-2 bg-primary rounded-full mt-2"></div>
-                  <div className="flex-1">
-                    <p className="text-sm text-card-foreground">{activity.description}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{activity.timestamp || new Date(activity.createdAt).toLocaleString('ar-EG')}</p>
-                  </div>
-                </div>
+              {recentActivities?.length ? recentActivities.slice(0, 5).map((activity: any) => (
+          <div key={activity.id} className="flex items-start space-x-4 space-x-reverse">
+            <div className="w-2 h-2 bg-primary rounded-full mt-2"></div>
+            <div className="flex-1">
+              <p className="text-sm text-card-foreground">{activity.description}</p>
+              <p className="text-xs text-muted-foreground mt-1">{activity.timestamp || new Date(activity.createdAt).toLocaleString('ar-EG')}</p>
+            </div>
+          </div>
               )) : (
-                <p className="text-center text-muted-foreground py-8">
-                  {currentUser?.role === 'technician' ? 'لا توجد أنشطة لك حتى الآن' : 'لا توجد أنشطة حديثة'}
-                </p>
+          <p className="text-center text-muted-foreground py-8">
+            {currentUser?.role === 'technician' ? 'لا توجد أنشطة لك حتى الآن' : 'لا توجد أنشطة حديثة'}
+          </p>
               )}
             </div>
           </CardContent>
