@@ -334,7 +334,7 @@ export default function UserManagement() {
                 </SelectContent>
               </Select>
             </div>
-            {canCreateUsers && (
+            {/* {canCreateUsers && (
               <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                 <DialogTrigger asChild>
                   <Button>إضافة مستخدم جديد</Button>
@@ -382,7 +382,7 @@ export default function UserManagement() {
                   </form>
                 </DialogContent>
               </Dialog>
-            )}
+            )} */}
           </div>
 
           <div className="border rounded-lg overflow-hidden">

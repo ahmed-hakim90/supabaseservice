@@ -74,6 +74,7 @@ export type RealTimeEvent =
   | 'transfer-created'
   | 'transfer-updated'
   | 'transfer-approved'
+  | 'transfer-completed'
   | 'activity-logged';
 
 // Broadcast to all connected clients

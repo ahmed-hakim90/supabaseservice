@@ -19,7 +19,15 @@ export default function SparePartsManagement() {
   const [selectedProduct, setSelectedProduct] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isSellDialogOpen, setIsSellDialogOpen] = useState(false);
   const [editingSparePart, setEditingSparePart] = useState<SparePart | null>(null);
+  const [sellingSparePart, setSellingSparePart] = useState<SparePart | null>(null);
+  const [sellFormData, setSellFormData] = useState({
+    warehouseId: "",
+    quantity: 1,
+    customerName: "",
+    salePrice: 0
+  });
   const [formData, setFormData] = useState<Partial<InsertSparePart>>({
     name: "",
     partNumber: "",
@@ -27,6 +35,11 @@ export default function SparePartsManagement() {
     productId: "none",
     price: 0,
     description: ""
+  });
+  const [inventoryData, setInventoryData] = useState({
+    warehouseId: "",
+    quantity: 0,
+    minQuantity: 5
   });
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -45,6 +58,11 @@ export default function SparePartsManagement() {
   const { data: categories } = useQuery({
     queryKey: ['/api/categories'],
     queryFn: () => apiGet('/api/categories'),
+  });
+
+  const { data: warehouses } = useQuery({
+    queryKey: ['/api/warehouses'],
+    queryFn: () => apiGet('/api/warehouses'),
   });
 
   const { data: spareParts, isLoading: sparePartsLoading } = useQuery({
@@ -88,6 +106,11 @@ export default function SparePartsManagement() {
         price: 0,
         description: ""
       });
+      setInventoryData({
+        warehouseId: "",
+        quantity: 0,
+        minQuantity: 5
+      });
       toast({ title: "تم إضافة قطعة الغيار بنجاح" });
     },
     onError: () => {
@@ -127,6 +150,49 @@ export default function SparePartsManagement() {
     },
   });
 
+  const sellSparePartMutation = useMutation({
+    mutationFn: (data: { warehouseId: string; sparePartId: string; quantity: number; customerName: string; salePrice?: number }) =>
+      apiPost('/api/spare-parts/sell', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/spare-parts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
+      setIsSellDialogOpen(false);
+      setSellingSparePart(null);
+      setSellFormData({
+        warehouseId: "",
+        quantity: 1,
+        customerName: "",
+        salePrice: 0
+      });
+      toast({ title: "تم بيع قطعة الغيار بنجاح" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        variant: "destructive", 
+        title: "فشل في البيع",
+        description: error.message || "حدث خطأ غير متوقع"
+      });
+    },
+  });
+
+  const fixInventoryMutation = useMutation({
+    mutationFn: () => apiPost('/api/spare-parts/fix-inventory', {}),
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/spare-parts'] });
+      toast({ 
+        title: "تم إصلاح سجلات المخزون",
+        description: `تم إصلاح ${result.fixedCount} من ${result.totalParts} قطعة غيار`
+      });
+    },
+    onError: (error: any) => {
+      toast({ 
+        variant: "destructive", 
+        title: "فشل في إصلاح المخزون", 
+        description: error.response?.data?.message || error.message 
+      });
+    },
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -143,7 +209,18 @@ export default function SparePartsManagement() {
         data: submitData
       });
     } else {
-      createSparePartMutation.mutate(submitData as InsertSparePart);
+      // For new spare parts, include inventory data
+      if (!inventoryData.warehouseId) {
+        toast({ variant: "destructive", title: "يرجى اختيار المخزن" });
+        return;
+      }
+      
+      const newSparePartData = {
+        ...submitData,
+        inventory: inventoryData
+      };
+      
+      createSparePartMutation.mutate(newSparePartData as any);
     }
   };
 
@@ -163,6 +240,32 @@ export default function SparePartsManagement() {
     if (confirm("هل أنت متأكد من حذف قطعة الغيار؟")) {
       deleteSparePartMutation.mutate(id);
     }
+  };
+
+  const handleSell = (sparePart: SparePart) => {
+    setSellingSparePart(sparePart);
+    setSellFormData({
+      warehouseId: "",
+      quantity: 1,
+      customerName: "",
+      salePrice: sparePart.price || 0
+    });
+    setIsSellDialogOpen(true);
+  };
+
+  const handleSellSubmit = () => {
+    if (!sellingSparePart || !sellFormData.warehouseId || !sellFormData.customerName) {
+      toast({ variant: "destructive", title: "يرجى ملء جميع الحقول المطلوبة" });
+      return;
+    }
+
+    sellSparePartMutation.mutate({
+      warehouseId: sellFormData.warehouseId,
+      sparePartId: sellingSparePart.id,
+      quantity: sellFormData.quantity,
+      customerName: sellFormData.customerName,
+      salePrice: sellFormData.salePrice || undefined
+    });
   };
 
   return (
@@ -207,11 +310,11 @@ export default function SparePartsManagement() {
               </div>
             </div>
 
-            <div className="flex items-end">
+            <div className="flex items-end gap-2">
               {canCreateSpareParts && (
                 <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button className="w-full">
+                    <Button className="flex-1">
                       <Plus className="h-4 w-4 mr-2" />
                       إضافة قطعة غيار
                     </Button>
@@ -293,6 +396,52 @@ export default function SparePartsManagement() {
                         />
                       </div>
 
+                      {/* إضافة حقول المخزون للقطع الجديدة فقط */}
+                      {!editingSparePart && (
+                        <>
+                          <div>
+                            <Label htmlFor="warehouse">المخزن</Label>
+                            <Select
+                              value={inventoryData.warehouseId}
+                              onValueChange={(value) => setInventoryData({ ...inventoryData, warehouseId: value })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="اختر المخزن" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {warehouses?.map((warehouse: any) => (
+                                  <SelectItem key={warehouse.id} value={warehouse.id}>
+                                    {warehouse.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <Label htmlFor="quantity">الكمية الأولية</Label>
+                            <Input
+                              id="quantity"
+                              type="number"
+                              min="0"
+                              value={inventoryData.quantity}
+                              onChange={(e) => setInventoryData({ ...inventoryData, quantity: parseInt(e.target.value) || 0 })}
+                            />
+                          </div>
+
+                          <div>
+                            <Label htmlFor="minQuantity">الحد الأدنى للكمية</Label>
+                            <Input
+                              id="minQuantity"
+                              type="number"
+                              min="0"
+                              value={inventoryData.minQuantity}
+                              onChange={(e) => setInventoryData({ ...inventoryData, minQuantity: parseInt(e.target.value) || 0 })}
+                            />
+                          </div>
+                        </>
+                      )}
+
                       <div>
                         <Label htmlFor="description">الوصف</Label>
                         <Textarea
@@ -327,6 +476,11 @@ export default function SparePartsManagement() {
                               price: 0,
                               description: ""
                             });
+                            setInventoryData({
+                              warehouseId: "",
+                              quantity: 0,
+                              minQuantity: 5
+                            });
                           }}
                           className="flex-1"
                         >
@@ -336,6 +490,19 @@ export default function SparePartsManagement() {
                     </form>
                   </DialogContent>
                 </Dialog>
+              )}
+              
+              {/* زر إصلاح المخزون - للإدارة فقط */}
+              {currentUser?.role === 'admin' && (
+                <Button 
+                  variant="outline"
+                  onClick={() => fixInventoryMutation.mutate()}
+                  disabled={fixInventoryMutation.isPending}
+                  className="whitespace-nowrap"
+                >
+                  <Package className="h-4 w-4 mr-2" />
+                  {fixInventoryMutation.isPending ? 'جاري الإصلاح...' : 'إصلاح المخزون'}
+                </Button>
               )}
             </div>
           </div>
@@ -386,6 +553,15 @@ export default function SparePartsManagement() {
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleSell(sparePart)}
+                        className="text-green-600 hover:text-green-700"
+                      >
+                        <Package className="h-4 w-4" />
+                        بيع
+                      </Button>
                       {canUpdateSpareParts && (
                         <Button
                           variant="outline"
@@ -433,6 +609,88 @@ export default function SparePartsManagement() {
           })
         )}
       </div>
+
+      {/* Sell Dialog */}
+      <Dialog open={isSellDialogOpen} onOpenChange={setIsSellDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              بيع قطعة غيار: {sellingSparePart?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="sell-warehouse">المخزن</Label>
+              <Select 
+                value={sellFormData.warehouseId} 
+                onValueChange={(value) => setSellFormData({...sellFormData, warehouseId: value})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="اختر المخزن" />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses?.map((warehouse: any) => (
+                    <SelectItem key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="sell-quantity">الكمية</Label>
+              <Input
+                id="sell-quantity"
+                type="number"
+                min="1"
+                value={sellFormData.quantity}
+                onChange={(e) => setSellFormData({...sellFormData, quantity: parseInt(e.target.value) || 1})}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="customer-name">اسم العميل</Label>
+              <Input
+                id="customer-name"
+                value={sellFormData.customerName}
+                onChange={(e) => setSellFormData({...sellFormData, customerName: e.target.value})}
+                placeholder="أدخل اسم العميل"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="sale-price">سعر البيع (اختياري)</Label>
+              <Input
+                id="sale-price"
+                type="number"
+                step="0.01"
+                value={sellFormData.salePrice}
+                onChange={(e) => setSellFormData({...sellFormData, salePrice: parseFloat(e.target.value) || 0})}
+                placeholder="سعر البيع"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-4">
+              <Button
+                onClick={handleSellSubmit}
+                disabled={sellSparePartMutation.isPending}
+                className="flex-1"
+              >
+                {sellSparePartMutation.isPending ? "جاري البيع..." : "تأكيد البيع"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsSellDialogOpen(false)}
+                className="flex-1"
+              >
+                إلغاء
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

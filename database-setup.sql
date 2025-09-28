@@ -223,3 +223,86 @@ INSERT INTO spare_parts (name, part_number, category_id, product_id, price, desc
 ('كيبل كهربائي 3 متر', 'CABLE-3M', NULL, NULL, 50, 'كيبل كهربائي معزول'),
 ('مفتاح كهربائي', 'SWITCH-001', NULL, NULL, 25, 'مفتاح تشغيل/إيقاف'),
 ('صمام غاز', 'VALVE-GAS-001', NULL, NULL, 75, 'صمام أمان للغاز');
+
+-- Create spare_parts_scrap table
+CREATE TABLE spare_parts_scrap (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  center_id UUID NOT NULL,
+  warehouse_id UUID NOT NULL,
+  spare_part_id UUID NOT NULL,
+  service_request_id UUID,
+  quantity INTEGER NOT NULL,
+  reason TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  created_by UUID NOT NULL,
+  FOREIGN KEY (center_id) REFERENCES service_centers(id),
+  FOREIGN KEY (warehouse_id) REFERENCES warehouses(id),
+  FOREIGN KEY (spare_part_id) REFERENCES spare_parts(id),
+  FOREIGN KEY (service_request_id) REFERENCES service_requests(id),
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- Create spare_parts_shortages table
+CREATE TABLE spare_parts_shortages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  center_id UUID NOT NULL,
+  warehouse_id UUID NOT NULL,
+  spare_part_id UUID NOT NULL,
+  quantity_needed INTEGER NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  status TEXT NOT NULL DEFAULT 'open',
+  resolved_at TIMESTAMP,
+  FOREIGN KEY (center_id) REFERENCES service_centers(id),
+  FOREIGN KEY (warehouse_id) REFERENCES warehouses(id),
+  FOREIGN KEY (spare_part_id) REFERENCES spare_parts(id)
+);
+
+-- Create indexes for the new tables
+CREATE INDEX idx_spare_parts_scrap_center_id ON spare_parts_scrap(center_id);
+CREATE INDEX idx_spare_parts_scrap_warehouse_id ON spare_parts_scrap(warehouse_id);
+CREATE INDEX idx_spare_parts_scrap_spare_part_id ON spare_parts_scrap(spare_part_id);
+CREATE INDEX idx_spare_parts_scrap_created_at ON spare_parts_scrap(created_at);
+
+CREATE INDEX idx_spare_parts_shortages_center_id ON spare_parts_shortages(center_id);
+CREATE INDEX idx_spare_parts_shortages_warehouse_id ON spare_parts_shortages(warehouse_id);
+CREATE INDEX idx_spare_parts_shortages_spare_part_id ON spare_parts_shortages(spare_part_id);
+CREATE INDEX idx_spare_parts_shortages_status ON spare_parts_shortages(status);
+
+-- Sales table (مبيعات قطع الغيار)
+CREATE TABLE sales (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id UUID NOT NULL,
+  center_id UUID NOT NULL,
+  warehouse_id UUID NOT NULL,
+  technician_id UUID NOT NULL,
+  total_amount INTEGER NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  FOREIGN KEY (customer_id) REFERENCES customers(id),
+  FOREIGN KEY (center_id) REFERENCES service_centers(id),
+  FOREIGN KEY (warehouse_id) REFERENCES warehouses(id),
+  FOREIGN KEY (technician_id) REFERENCES users(id)
+);
+
+-- Sale Items table (عناصر البيع)
+CREATE TABLE sale_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sale_id UUID NOT NULL,
+  spare_part_id UUID NOT NULL,
+  quantity INTEGER NOT NULL,
+  unit_price INTEGER NOT NULL,
+  total_price INTEGER NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
+  FOREIGN KEY (spare_part_id) REFERENCES spare_parts(id)
+);
+
+-- Create indexes for sales tables
+CREATE INDEX idx_sales_customer_id ON sales(customer_id);
+CREATE INDEX idx_sales_center_id ON sales(center_id);
+CREATE INDEX idx_sales_warehouse_id ON sales(warehouse_id);
+CREATE INDEX idx_sales_technician_id ON sales(technician_id);
+CREATE INDEX idx_sales_created_at ON sales(created_at);
+
+CREATE INDEX idx_sale_items_sale_id ON sale_items(sale_id);
+CREATE INDEX idx_sale_items_spare_part_id ON sale_items(spare_part_id);

@@ -1,14 +1,47 @@
 {
-  "name": "rest-express",
-  "version": "1.0.0",
+  "name": "supabase-service-advanced",
+  "version": "2.0.0",
+  "description": "نظام إدارة الخدمات المتقدم - نظام شامل لإدارة المؤسسات مع أدوات متكاملة للمستودعات والمخزون والأمان",
   "type": "module",
   "license": "MIT",
+  "author": {
+    "name": "Ahmed Hakim",
+    "email": "ahmed.hakim@example.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ahmed-hakim90/supabaseservice.git"
+  },
+  "keywords": [
+    "warehouse-management",
+    "inventory-system", 
+    "erp-system",
+    "admin-dashboard",
+    "security-monitoring",
+    "network-monitoring",
+    "backup-management",
+    "react",
+    "typescript",
+    "nodejs",
+    "postgresql"
+  ],
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint:fix": "eslint . --ext ts,tsx --fix",
+    "format": "prettier --write .",
+    "type-check": "tsc --noEmit",
+    "test": "echo \"No tests yet\" && exit 0",
+    "clean": "rm -rf dist && rm -rf client/dist",
+    "install:all": "npm install && cd client && npm install",
+    "health": "curl http://localhost:3001/health"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -43,6 +76,7 @@
     "@tanstack/react-query": "^5.60.5",
     "@types/bcrypt": "^6.0.0",
     "@types/pg": "^8.15.5",
+    "axios": "^1.12.2",
     "bcrypt": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

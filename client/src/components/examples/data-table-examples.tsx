@@ -1,11 +1,57 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import DataTable, { Column } from "@/components/ui/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-progress";
 
+interface Customer {
+  id: string;
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+  address: string;
+}
+
+interface Category {
+  id: string;
+  name: string;
+}
+
+interface Product {
+  id: string;
+  name: string;
+  categoryId: string;
+  price: number;
+  stock: number;
+  model?: string;
+  status: 'active' | 'inactive';
+}
+
+interface ServiceRequest {
+  id: string;
+  title: string;
+  status: string;
+  customerName: string;
+  createdAt: string;
+  requestNumber: string;
+  deviceName: string;
+  model?: string;
+  issue: string;
+  estimatedCost?: number;
+}
+
 // مثال لتطبيق DataTable على العملاء
-export const CustomersTableExample = ({ customers, isLoading, onEdit, onDelete }) => {
+export const CustomersTableExample = ({ 
+  customers, 
+  isLoading, 
+  onEdit, 
+  onDelete 
+}: {
+  customers: Customer[];
+  isLoading: boolean;
+  onEdit: (customer: Customer) => void;
+  onDelete: (id: string) => void;
+}) => {
   const columns: Column<any>[] = [
     {
       key: 'fullName',
@@ -81,8 +127,20 @@ export const CustomersTableExample = ({ customers, isLoading, onEdit, onDelete }
 };
 
 // مثال لتطبيق DataTable على المنتجات
-export const ProductsTableExample = ({ products, categories, isLoading, onEdit, onDelete }) => {
-  const columns: Column<any>[] = [
+export const ProductsTableExample = ({ 
+  products, 
+  categories, 
+  isLoading, 
+  onEdit, 
+  onDelete 
+}: {
+  products: Product[];
+  categories: Category[];
+  isLoading: boolean;
+  onEdit: (product: Product) => void;
+  onDelete: (id: string) => void;
+}) => {
+  const columns: Column<Product>[] = [
     {
       key: 'name',
       header: 'اسم المنتج',
@@ -163,8 +221,20 @@ export const ProductsTableExample = ({ products, categories, isLoading, onEdit, 
 };
 
 // مثال لتطبيق DataTable على طلبات الصيانة
-export const ServiceRequestsTableExample = ({ requests, isLoading, onView, onEdit, onDelete }) => {
-  const columns: Column<any>[] = [
+export const ServiceRequestsTableExample = ({ 
+  requests, 
+  isLoading, 
+  onView, 
+  onEdit, 
+  onDelete 
+}: {
+  requests: ServiceRequest[];
+  isLoading: boolean;
+  onView: (request: ServiceRequest) => void;
+  onEdit: (request: ServiceRequest) => void;
+  onDelete: (id: string) => void;
+}) => {
+  const columns: Column<ServiceRequest>[] = [
     {
       key: 'requestNumber',
       header: 'رقم الطلب',
@@ -200,7 +270,11 @@ export const ServiceRequestsTableExample = ({ requests, isLoading, onView, onEdi
     {
       key: 'status',
       header: 'الحالة',
-      render: (request) => <StatusBadge status={request.status} />
+      render: (request) => (
+        <Badge variant={request.status === 'completed' ? 'default' : 'secondary'}>
+          {request.status}
+        </Badge>
+      )
     },
     {
       key: 'estimatedCost',
@@ -259,9 +333,9 @@ export const ServiceRequestsTableExample = ({ requests, isLoading, onView, onEdi
 
 // Hook مساعد للاستخدام مع API
 export const usePaginatedData = (endpoint: string, limit = 100) => {
-  const [data, setData] = useState([]);
+  const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -271,7 +345,7 @@ export const usePaginatedData = (endpoint: string, limit = 100) => {
         const result = await response.json();
         setData(result);
       } catch (err) {
-        setError(err.message);
+        setError((err as Error).message);
       } finally {
         setLoading(false);
       }
@@ -280,5 +354,21 @@ export const usePaginatedData = (endpoint: string, limit = 100) => {
     fetchData();
   }, [endpoint, limit]);
 
-  return { data, loading, error, refetch: () => fetchData() };
+  const refetch = () => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`${endpoint}?limit=${limit}`);
+        const result = await response.json();
+        setData(result);
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  };
+
+  return { data, loading, error, refetch };
 };

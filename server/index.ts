@@ -5,6 +5,30 @@ import { createServer } from 'http';
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { initializeWebSocket } from "./websocket";
+import { pool } from "./db";
+
+// معالجة الأخطاء غير المتوقعة
+process.on('uncaughtException', (error) => {
+  console.error('🚨 Uncaught Exception:', error);
+  console.error('📍 Stack:', error.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🚨 Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// معالجة إغلاق التطبيق بشكل صحيح
+process.on('SIGTERM', async () => {
+  console.log('📴 SIGTERM received, shutting down gracefully...');
+  await pool.end();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('📴 SIGINT received, shutting down gracefully...');
+  await pool.end();
+  process.exit(0);
+});
 
 const app = express();
 const httpServer = createServer(app);
@@ -50,6 +74,27 @@ app.use((req, res, next) => {
   });
 
   next();
+});
+
+// Middleware للتعامل مع أخطاء قاعدة البيانات
+app.use((error: any, req: Request, res: Response, next: NextFunction) => {
+  if (error?.code === 'ECONNRESET' || error?.message?.includes('db_termination')) {
+    console.error('🚨 Database connection error:', error.message);
+    return res.status(503).json({ 
+      message: 'خطأ في الاتصال بقاعدة البيانات', 
+      error: 'Database connection lost' 
+    });
+  }
+  
+  if (error?.code?.startsWith('08')) { // PostgreSQL connection errors
+    console.error('🚨 PostgreSQL connection error:', error.message);
+    return res.status(503).json({ 
+      message: 'خطأ في الاتصال بقاعدة البيانات', 
+      error: 'Database unavailable' 
+    });
+  }
+  
+  next(error);
 });
 
 (async () => {

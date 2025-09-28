@@ -48,6 +48,59 @@ export type SparePartsScrap = typeof sparePartsScrap.$inferSelect;
 
 export type InsertSparePartsShortage = z.infer<typeof insertSparePartsShortageSchema>;
 export type SparePartsShortage = typeof sparePartsShortages.$inferSelect;
+
+// Sales table (مبيعات قطع الغيار)
+export const sales = pgTable("sales", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: uuid("customer_id").notNull(),
+  centerId: uuid("center_id").notNull(),
+  warehouseId: uuid("warehouse_id").notNull(),
+  technicianId: uuid("technician_id").notNull(), // الموظف الذي قام بالبيع
+  totalAmount: integer("total_amount").notNull(), // إجمالي المبلغ
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Sale Items table (عناصر البيع)
+export const saleItems = pgTable("sale_items", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  saleId: uuid("sale_id").notNull(),
+  sparePartId: uuid("spare_part_id").notNull(),
+  quantity: integer("quantity").notNull(),
+  unitPrice: integer("unit_price").notNull(), // سعر القطعة الواحدة
+  totalPrice: integer("total_price").notNull(), // السعر الإجمالي للعنصر
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Schemas for sales
+export const insertSaleSchema = createInsertSchema(sales).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  customerId: z.string(),
+  centerId: z.string(),
+  warehouseId: z.string(),
+  technicianId: z.string(),
+  totalAmount: z.number().min(0),
+  notes: z.string().optional(),
+});
+
+export const insertSaleItemSchema = createInsertSchema(saleItems).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  saleId: z.string(),
+  sparePartId: z.string(),
+  quantity: z.number().min(1),
+  unitPrice: z.number().min(0),
+  totalPrice: z.number().min(0),
+});
+
+export type InsertSale = z.infer<typeof insertSaleSchema>;
+export type Sale = typeof sales.$inferSelect;
+
+export type InsertSaleItem = z.infer<typeof insertSaleItemSchema>;
+export type SaleItem = typeof saleItems.$inferSelect;
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, timestamp, uuid, integer, boolean, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
@@ -57,7 +110,7 @@ import { z } from "zod";
 export const userRoleEnum = pgEnum('user_role', ['admin', 'manager', 'technician', 'receptionist', 'warehouse_manager', 'customer']);
 export const userStatusEnum = pgEnum('user_status', ['active', 'inactive', 'pending']);
 export const serviceRequestStatusEnum = pgEnum('service_request_status', ['pending', 'in_progress', 'completed', 'cancelled']);
-export const transferStatusEnum = pgEnum('transfer_status', ['pending', 'approved', 'rejected', 'completed']);
+export const transferStatusEnum = pgEnum('transfer_status', ['pending', 'approved', 'rejected', 'completed', 'in_transit', 'cancelled']);
 
 // Users table
 export const users = pgTable("users", {
@@ -203,6 +256,7 @@ export const productInventory = pgTable("product_inventory", {
 // Parts Transfers table
 export const partsTransfers = pgTable("parts_transfers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  transferNumber: varchar("transfer_number", { length: 50 }).notNull().unique(),
   fromWarehouseId: uuid("from_warehouse_id").notNull(),
   toWarehouseId: uuid("to_warehouse_id").notNull(),
   sparePartId: uuid("spare_part_id").notNull(),
@@ -210,10 +264,13 @@ export const partsTransfers = pgTable("parts_transfers", {
   status: transferStatusEnum("status").notNull().default('pending'),
   requestedBy: uuid("requested_by").notNull(),
   approvedBy: uuid("approved_by"),
+  executedBy: uuid("executed_by"),
   reason: text("reason"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  approvedAt: timestamp("approved_at"),
+  completedAt: timestamp("completed_at"),
 });
 
 // Activity Logs table
@@ -324,6 +381,7 @@ export const insertPartsTransferSchema = createInsertSchema(partsTransfers).omit
   createdAt: true,
   updatedAt: true,
 }).extend({
+  transferNumber: z.string().optional(), // Make optional since it can be auto-generated
   fromWarehouseId: z.string(),
   toWarehouseId: z.string(),
   sparePartId: z.string(),
@@ -412,3 +470,41 @@ export type ServiceRequestFollowUp = typeof serviceRequestFollowUps.$inferSelect
 
 export type InsertServiceRequestFollowUpSparePart = z.infer<typeof insertServiceRequestFollowUpSparePartSchema>;
 export type ServiceRequestFollowUpSparePart = typeof serviceRequestFollowUpSpareParts.$inferSelect;
+
+// Warehouse Permissions table (أذونات المخزن)
+export const warehousePermissions = pgTable("warehouse_permissions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  permissionNumber: varchar("permission_number", { length: 50 }).notNull().unique(),
+  type: text("type").notNull(), // 'addition' or 'withdrawal' (إضافة أو صرف)
+  warehouseId: uuid("warehouse_id").notNull(),
+  sparePartId: uuid("spare_part_id").notNull(),
+  quantity: integer("quantity").notNull(),
+  reason: text("reason").notNull(),
+  requestedBy: uuid("requested_by").notNull(), // المستخدم الذي طلب الإذن
+  approvedBy: uuid("approved_by"), // المستخدم الذي وافق على الإذن
+  status: text("status").notNull().default('pending'), // pending, approved, rejected, executed
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  approvedAt: timestamp("approved_at"),
+  executedAt: timestamp("executed_at"),
+  executedBy: uuid("executed_by"), // المستخدم الذي نفذ الإذن
+});
+
+export const insertWarehousePermissionSchema = createInsertSchema(warehousePermissions).omit({
+  id: true,
+  createdAt: true,
+  approvedAt: true,
+  executedAt: true,
+}).extend({
+  warehouseId: z.string(),
+  sparePartId: z.string(),
+  requestedBy: z.string(),
+  approvedBy: z.string().optional(),
+  executedBy: z.string().optional(),
+  quantity: z.number().min(1),
+  type: z.enum(['addition', 'withdrawal']),
+  status: z.enum(['pending', 'approved', 'rejected', 'executed']).optional(),
+});
+
+export type InsertWarehousePermission = z.infer<typeof insertWarehousePermissionSchema>;
+export type WarehousePermission = typeof warehousePermissions.$inferSelect;

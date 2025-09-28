@@ -197,3 +197,399 @@
     transform: translateX(0);
   }
 }
+
+/* Loading spinner animation */
+.loading-spinner {
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #333;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Pulse animation for live indicators */
+.animate-pulse-slow {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Enhanced animations for new components */
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Alert notification styles */
+.alert-notification {
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Status indicators */
+.status-indicator {
+  position: relative;
+  display: inline-block;
+}
+
+.status-indicator::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  animation: statusPing 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.status-indicator.success::before {
+  background-color: rgb(34 197 94);
+}
+
+.status-indicator.warning::before {
+  background-color: rgb(245 158 11);
+}
+
+.status-indicator.error::before {
+  background-color: rgb(239 68 68);
+}
+
+@keyframes statusPing {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* Metric cards hover effects */
+.metric-card {
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* Progress bar animations */
+.progress-bar-pulse {
+  background-size: 40px 40px;
+  background-image: linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.15) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.15) 75%,
+    transparent 75%,
+    transparent
+  );
+  animation: progressPulse 2s linear infinite;
+}
+
+@keyframes progressPulse {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 40px 40px;
+  }
+}
+
+/* Notification badges */
+.notification-badge {
+  animation: badgePulse 2s infinite;
+}
+
+@keyframes badgePulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Button loading states */
+.btn-loading {
+  position: relative;
+  color: transparent;
+}
+
+.btn-loading::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: auto;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-in,
+  .alert-notification,
+  .status-indicator::before,
+  .progress-bar-pulse,
+  .notification-badge,
+  .loading-spinner {
+    animation: none;
+  }
+}
+
+/* Responsive tabs optimization */
+@media (max-width: 768px) {
+  .mobile-hidden {
+    display: none;
+  }
+  
+  .mobile-full {
+    width: 100%;
+  }
+  
+  .mobile-stack {
+    flex-direction: column;
+  }
+  
+  /* Mobile tabs optimization */
+  .tabs-list-mobile {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+  }
+  
+  .tab-trigger-mobile {
+    padding: 8px 4px;
+    font-size: 10px;
+    flex-direction: column;
+    gap: 2px;
+  }
+  
+  .tab-trigger-mobile .bi {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  /* Tablet optimization */
+  .tabs-list-tablet {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 4px;
+  }
+}
+
+@media (min-width: 1025px) {
+  /* Desktop optimization */
+  .tabs-list-desktop {
+    grid-template-columns: repeat(12, 1fr);
+    gap: 4px;
+  }
+}
+
+/* Enhanced component styles */
+.security-threat-critical {
+  background: linear-gradient(45deg, #fee2e2, #fecaca);
+  border-left: 4px solid #ef4444;
+}
+
+.network-device-online {
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+  border-color: #22c55e;
+}
+
+.update-critical {
+  background: linear-gradient(45deg, #fef3c7, #fed7aa);
+  border-left: 4px solid #f59e0b;
+}
+
+/* Data visualization enhancements */
+.chart-tooltip {
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.metric-trend-up {
+  color: #22c55e;
+}
+
+.metric-trend-down {
+  color: #ef4444;
+}
+
+.metric-trend-stable {
+  color: #6b7280;
+}
+
+/* Quick Actions Animations */
+.quick-action-card {
+  @apply transition-all duration-300 transform hover:-translate-y-2 hover:shadow-2xl;
+}
+
+.quick-action-card:hover {
+  animation: quickActionPulse 1s infinite;
+}
+
+@keyframes quickActionPulse {
+  0%, 100% {
+    transform: translateY(-8px) scale(1);
+  }
+  50% {
+    transform: translateY(-8px) scale(1.02);
+  }
+}
+
+.metric-card-hover {
+  @apply transition-all duration-300 transform hover:scale-105 hover:shadow-xl;
+}
+
+.metric-card-hover:hover {
+  animation: metricGlow 2s infinite alternate;
+}
+
+@keyframes metricGlow {
+  0% {
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15);
+  }
+  100% {
+    box-shadow: 0 8px 30px rgba(59, 130, 246, 0.25);
+  }
+}
+
+/* Interactive tooltips */
+.tooltip-trigger:hover + .tooltip-content {
+  opacity: 1;
+  visibility: visible;
+}
+
+.tooltip-content {
+  @apply opacity-0 invisible transition-all duration-300;
+}
+
+/* Action feedback */
+.action-feedback {
+  @apply transition-all duration-200 transform active:scale-95;
+}
+
+/* Dashboard enhancements */
+.dashboard-metric-card {
+  @apply transition-all duration-300 transform hover:scale-105 hover:shadow-xl;
+}
+
+.dashboard-metric-card:hover {
+  animation: dashboardGlow 3s infinite alternate;
+}
+
+@keyframes dashboardGlow {
+  0% {
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.1);
+  }
+  100% {
+    box-shadow: 0 8px 40px rgba(59, 130, 246, 0.2);
+  }
+}
+
+.dashboard-quick-action {
+  @apply transition-all duration-200 transform hover:scale-110 active:scale-95;
+}
+
+.dashboard-quick-action:hover {
+  animation: actionPulse 1.5s infinite;
+}
+
+@keyframes actionPulse {
+  0%, 100% {
+    transform: scale(1.1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+
+.status-indicator {
+  animation: statusBlink 2s infinite;
+}
+
+@keyframes statusBlink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0.7;
+  }
+}
+
+/* Enhanced hover effects for cards */
+.hover-scale:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+/* Loading shimmer effect */
+.shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}

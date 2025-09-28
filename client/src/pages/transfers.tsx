@@ -21,89 +21,73 @@ interface Transfer {
   sparePartId: string;
   quantity: number;
   reason: string;
-  status: "pending" | "approved" | "in_transit" | "completed" | "cancelled";
+  status: "pending" | "approved" | "rejected" | "completed";
   requestedBy: string;
   approvedBy?: string;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
-  completedAt?: Date;
+  fromWarehouse?: {
+    id: string;
+    name: string;
+    centerId: string;
+  };
+  toWarehouse?: {
+    id: string;
+    name: string;
+    centerId: string;
+  };
+  sparePart?: {
+    id: string;
+    name: string;
+    partNumber: string;
+  };
+  requester?: {
+    id: string;
+    fullName: string;
+  };
 }
 
 interface InsertTransfer {
-  transferNumber: string;
   fromWarehouseId: string;
   toWarehouseId: string;
   sparePartId: string;
   quantity: number;
   reason: string;
-  status?: "pending" | "approved" | "in_transit" | "completed" | "cancelled";
-  requestedBy: string;
   notes?: string;
 }
 
-// Mock data for transfers
-const mockTransfers: Transfer[] = [
-  {
-    id: "trans-1",
-    transferNumber: "TR-2024-001",
-    fromWarehouseId: "warehouse-1",
-    toWarehouseId: "warehouse-2",
-    sparePartId: "part-1",
-    quantity: 5,
-    reason: "نقص في المخزون",
-    status: "pending",
-    requestedBy: "user-1",
-    notes: "نقل عاجل مطلوب",
-    createdAt: new Date("2024-09-01"),
-    updatedAt: new Date("2024-09-01")
-  },
-  {
-    id: "trans-2", 
-    transferNumber: "TR-2024-002",
-    fromWarehouseId: "warehouse-2",
-    toWarehouseId: "warehouse-1",
-    sparePartId: "part-2",
-    quantity: 3,
-    reason: "طلب من فني",
-    status: "completed",
-    requestedBy: "user-2",
-    approvedBy: "user-1",
-    notes: "تم النقل بنجاح",
-    createdAt: new Date("2024-08-28"),
-    updatedAt: new Date("2024-09-02"),
-    completedAt: new Date("2024-09-02")
-  }
-];
+interface SparePart {
+  id: string;
+  name: string;
+  partNumber: string;
+  description?: string;
+  categoryId: string;
+  minQuantity: number;
+  currentQuantity: number;
+  unitPrice: number;
+}
 
-// Mock spare parts data
-const mockSpareParts = [
-  { id: "part-1", name: "محرك غسالة", partNumber: "MT-001" },
-  { id: "part-2", name: "ضاغط ثلاجة", partNumber: "CP-002" },
-  { id: "part-3", name: "مضخة مياه", partNumber: "WP-003" }
-];
-
-// Mock warehouses data
-const mockWarehouses = [
-  { id: "warehouse-1", name: "مخزن الرياض الرئيسي", location: "الرياض" },
-  { id: "warehouse-2", name: "مخزن جدة", location: "جدة" },
-  { id: "warehouse-3", name: "مخزن الدمام", location: "الدمام" }
-];
+interface Warehouse {
+  id: string;
+  name: string;
+  location: string;
+  managerId: string;
+  centerId: string;
+}
 
 const statusColors = {
-  pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
-  approved: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300", 
-  in_transit: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
-  completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-  cancelled: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
+  pending: "bg-yellow-100 text-yellow-800",
+  approved: "bg-blue-100 text-blue-800",
+  rejected: "bg-red-100 text-red-800",
+  completed: "bg-green-100 text-green-800"
 };
 
 const statusLabels = {
   pending: "في الانتظار",
   approved: "موافق عليه",
-  in_transit: "في الطريق", 
-  completed: "مكتمل",
-  cancelled: "ملغي"
+  rejected: "مرفوض",
+  completed: "مكتمل"
 };
 
 export default function Transfers() {
@@ -116,35 +100,85 @@ export default function Transfers() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Mock API calls - replace with real API calls
-  const transfers = mockTransfers;
-  const spareParts = mockSpareParts;
-  const warehouses = mockWarehouses;
+  // Fetch transfers data
+  const { data: transfers = [] } = useQuery({
+    queryKey: ["parts-transfers"],
+    queryFn: async () => {
+      const data = await apiGet("/api/parts-transfers");
+      return data.map((transfer: any) => ({
+        ...transfer,
+        createdAt: new Date(transfer.createdAt),
+        updatedAt: new Date(transfer.updatedAt),
+      }));
+    },
+  });
 
-  const createTransferMutation = {
-    mutate: (data: InsertTransfer) => {
-      // Mock creation
+  // Fetch spare parts data
+  const { data: spareParts = [] } = useQuery({
+    queryKey: ["spare-parts"],
+    queryFn: async () => await apiGet("/api/spare-parts"),
+  });
+
+  // Fetch warehouses data
+  const { data: warehouses = [] } = useQuery({
+    queryKey: ["warehouses"],
+    queryFn: async () => await apiGet("/api/warehouses"),
+  });
+
+  const createTransferMutation = useMutation({
+    mutationFn: async (data: InsertTransfer) => {
+      return await apiPost("/api/parts-transfers", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["parts-transfers"] });
       setIsAddDialogOpen(false);
       setFormData({});
       toast({ title: "تم إنشاء طلب التحويل بنجاح" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "خطأ في إنشاء طلب التحويل", 
+        description: error.message,
+        variant: "destructive"
+      });
     }
-  };
+  });
 
-  const updateTransferMutation = {
-    mutate: ({ id, data }: { id: string; data: Partial<InsertTransfer> }) => {
-      // Mock update
+  const updateTransferMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<Transfer> }) => {
+      return await apiPut(`/api/parts-transfers/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["parts-transfers"] });
       setEditingTransfer(null);
       setFormData({});
       toast({ title: "تم تحديث طلب التحويل بنجاح" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "خطأ في تحديث طلب التحويل", 
+        description: error.message,
+        variant: "destructive" 
+      });
     }
-  };
+  });
 
-  const deleteTransferMutation = {
-    mutate: (id: string) => {
-      // Mock delete
+  const deleteTransferMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiDelete(`/api/parts-transfers/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["parts-transfers"] });
       toast({ title: "تم حذف طلب التحويل بنجاح" });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "خطأ في حذف طلب التحويل", 
+        description: error.message,
+        variant: "destructive" 
+      });
     }
-  };
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,7 +213,7 @@ export default function Transfers() {
     });
   };
 
-  const filteredTransfers = transfers.filter(transfer => {
+  const filteredTransfers = transfers.filter((transfer: Transfer) => {
     const matchesSearch = transfer.transferNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          transfer.reason.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || transfer.status === statusFilter;
@@ -227,7 +261,7 @@ export default function Transfers() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">جميع المخازن</SelectItem>
-            {warehouses.map(warehouse => (
+            {warehouses.map((warehouse: Warehouse) => (
               <SelectItem key={warehouse.id} value={warehouse.id}>
                 {warehouse.name}
               </SelectItem>
@@ -260,7 +294,7 @@ export default function Transfers() {
                       <SelectValue placeholder="اختر المخزن المرسل" />
                     </SelectTrigger>
                     <SelectContent>
-                      {warehouses.map(warehouse => (
+                      {warehouses.map((warehouse: any) => (
                         <SelectItem key={warehouse.id} value={warehouse.id}>
                           {warehouse.name}
                         </SelectItem>
@@ -279,7 +313,7 @@ export default function Transfers() {
                       <SelectValue placeholder="اختر المخزن المستقبل" />
                     </SelectTrigger>
                     <SelectContent>
-                      {warehouses.map(warehouse => (
+                      {warehouses.map((warehouse: any) => (
                         <SelectItem key={warehouse.id} value={warehouse.id}>
                           {warehouse.name}
                         </SelectItem>
@@ -298,7 +332,7 @@ export default function Transfers() {
                       <SelectValue placeholder="اختر قطعة الغيار" />
                     </SelectTrigger>
                     <SelectContent>
-                      {spareParts.map(part => (
+                      {spareParts.map((part: any) => (
                         <SelectItem key={part.id} value={part.id}>
                           {part.name} ({part.partNumber})
                         </SelectItem>
@@ -374,7 +408,7 @@ export default function Transfers() {
             </Button>
           </div>
         ) : (
-          filteredTransfers.map((transfer) => (
+          filteredTransfers.map((transfer: any) => (
             <Card key={transfer.id} className="hover-scale">
               <CardHeader>
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -388,10 +422,10 @@ export default function Transfers() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge 
-                      className={statusColors[transfer.status]} 
+                      className={(statusColors as any)[transfer.status]} 
                       data-testid={`badge-status-${transfer.id}`}
                     >
-                      {statusLabels[transfer.status]}
+                      {(statusLabels as any)[transfer.status]}
                     </Badge>
                   </div>
                 </div>
@@ -401,19 +435,19 @@ export default function Transfers() {
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">من مخزن</p>
                     <p className="font-medium" data-testid={`text-from-warehouse-${transfer.id}`}>
-                      {warehouses.find(w => w.id === transfer.fromWarehouseId)?.name || "غير محدد"}
+                      {warehouses.find((w: any) => w.id === transfer.fromWarehouseId)?.name || "غير محدد"}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">إلى مخزن</p>
                     <p className="font-medium" data-testid={`text-to-warehouse-${transfer.id}`}>
-                      {warehouses.find(w => w.id === transfer.toWarehouseId)?.name || "غير محدد"}
+                      {warehouses.find((w: any) => w.id === transfer.toWarehouseId)?.name || "غير محدد"}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">قطعة الغيار</p>
                     <p className="font-medium" data-testid={`text-spare-part-${transfer.id}`}>
-                      {spareParts.find(p => p.id === transfer.sparePartId)?.name || "غير محدد"}
+                      {spareParts.find((p: any) => p.id === transfer.sparePartId)?.name || "غير محدد"}
                     </p>
                   </div>
                   <div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { apiGet } from "../lib/db";
+import { useAuth } from "@/lib/auth";
+import { canRead, canAccessPage } from "@/lib/permissions";
+import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 
@@ -31,80 +34,15 @@ const actionTypes = {
   export: { name: 'تصدير', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300' },
 };
 
-const mockActivities = [
-  {
-    id: '1',
-    type: 'user',
-    action: 'create',
-    userId: 'user-1',
-    userName: 'أحمد محمد',
-    userRole: 'admin',
-    description: 'إضافة مستخدم جديد: محمد علي',
-    resourceId: 'user-2',
-    resourceType: 'user',
-    ipAddress: '192.168.1.100',
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-    createdAt: '2024-09-08T10:30:00Z',
-  },
-  {
-    id: '2',
-    type: 'service-request',
-    action: 'update',
-    userId: 'user-3',
-    userName: 'سارة أحمد',
-    userRole: 'technician',
-    description: 'تحديث حالة طلب الصيانة إلى "قيد التقدم"',
-    resourceId: 'req-123',
-    resourceType: 'service-request',
-    ipAddress: '192.168.1.101',
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X)',
-    createdAt: '2024-09-08T09:45:00Z',
-  },
-  {
-    id: '3',
-    type: 'auth',
-    action: 'login',
-    userId: 'user-2',
-    userName: 'محمد علي',
-    userRole: 'manager',
-    description: 'تسجيل دخول ناجح',
-    resourceId: null,
-    resourceType: null,
-    ipAddress: '192.168.1.102',
-    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS)',
-    createdAt: '2024-09-08T08:15:00Z',
-  },
-  {
-    id: '4',
-    type: 'center',
-    action: 'create',
-    userId: 'user-1',
-    userName: 'أحمد محمد',
-    userRole: 'admin',
-    description: 'إضافة مركز خدمة جديد: مركز الرياض الرئيسي',
-    resourceId: 'center-456',
-    resourceType: 'center',
-    ipAddress: '192.168.1.100',
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-    createdAt: '2024-09-07T16:20:00Z',
-  },
-  {
-    id: '5',
-    type: 'customer',
-    action: 'update',
-    userId: 'user-4',
-    userName: 'فاطمة الزهراء',
-    userRole: 'receptionist',
-    description: 'تحديث بيانات العميل: خالد السعيد',
-    resourceId: 'customer-789',
-    resourceType: 'customer',
-    ipAddress: '192.168.1.103',
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-    createdAt: '2024-09-07T14:30:00Z',
-  },
-];
+// Removed mock activities; data now fetched from backend
 
 export default function Activities() {
+  const { user: currentUser } = useAuth();
+  const [, setLocation] = useLocation();
+  // Simple guard
+  if (currentUser && (!canAccessPage(currentUser.role, 'activities') || !canRead(currentUser.role, 'activities'))) {
+    setLocation('/dashboard/not-found');
+  }
   const [selectedType, setSelectedType] = useState("all");
   const [selectedAction, setSelectedAction] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -115,18 +53,37 @@ export default function Activities() {
     queryFn: () => apiGet('/api/users'),
   });
 
-  const { data: activities, isLoading } = useQuery({
+  const { data: rawActivities, isLoading } = useQuery({
     queryKey: ['/api/activities'],
-    queryFn: () => Promise.resolve(mockActivities), // Mock data for now
+    queryFn: () => apiGet('/api/activities'),
   });
 
-  const filteredActivities = activities?.filter((activity: any) => {
+  // Map backend shape to UI shape
+  const activities = useMemo(() => {
+    if (!rawActivities) return [];
+    return rawActivities.map((a: any) => {
+      const user = users?.find((u: any) => u.id === a.userId);
+      return {
+        id: a.id,
+        type: a.entityType, // mapping entityType -> filter type
+        action: a.action,
+        userId: a.userId,
+        userName: user?.fullName || 'مستخدم',
+        userRole: user?.role || 'unknown',
+        description: a.description,
+        resourceId: a.entityId,
+        createdAt: a.createdAt,
+      };
+    });
+  }, [rawActivities, users]);
+
+  const filteredActivities = activities.filter((activity: any) => {
     const matchesType = selectedType === 'all' || activity.type === selectedType;
     const matchesAction = selectedAction === 'all' || activity.action === selectedAction;
     const matchesSearch = 
       activity.userName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       activity.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      activity.ipAddress?.toLowerCase().includes(searchTerm.toLowerCase());
+      (activity.resourceId || '').toLowerCase().includes(searchTerm.toLowerCase());
     return matchesType && matchesAction && matchesSearch;
   }) || [];
 
@@ -250,7 +207,7 @@ export default function Activities() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">إجمالي الأنشطة</p>
-                <p className="text-2xl font-bold">{activities?.length || 0}</p>
+                <p className="text-2xl font-bold">{activities.length || 0}</p>
               </div>
             </div>
           </CardContent>
@@ -265,7 +222,7 @@ export default function Activities() {
               <div>
                 <p className="text-sm text-muted-foreground">أنشطة اليوم</p>
                 <p className="text-2xl font-bold">
-                  {activities?.filter((a: any) => {
+                  {activities.filter((a: any) => {
                     const today = new Date().toDateString();
                     return new Date(a.createdAt).toDateString() === today;
                   }).length || 0}
@@ -284,7 +241,7 @@ export default function Activities() {
               <div>
                 <p className="text-sm text-muted-foreground">مستخدمين نشطين</p>
                 <p className="text-2xl font-bold">
-                  {new Set(activities?.map((a: any) => a.userId)).size || 0}
+                  {new Set(activities.map((a: any) => a.userId)).size || 0}
                 </p>
               </div>
             </div>
@@ -300,7 +257,7 @@ export default function Activities() {
               <div>
                 <p className="text-sm text-muted-foreground">عمليات تسجيل دخول</p>
                 <p className="text-2xl font-bold">
-                  {activities?.filter((a: any) => a.action === 'login').length || 0}
+                  {activities.filter((a: any) => a.action === 'login').length || 0}
                 </p>
               </div>
             </div>
@@ -314,7 +271,7 @@ export default function Activities() {
           <CardTitle className="flex items-center justify-between">
             <span>سجل الأنشطة</span>
             <span className="text-sm font-normal text-muted-foreground">
-              عرض {filteredActivities.length} من {activities?.length || 0} نشاط
+              عرض {filteredActivities.length} من {activities.length || 0} نشاط
             </span>
           </CardTitle>
         </CardHeader>
@@ -363,18 +320,14 @@ export default function Activities() {
                       {activity.description}
                     </p>
 
-                    <div className="flex items-center space-x-4 space-x-reverse text-xs text-muted-foreground">
-                      <div className="flex items-center space-x-1 space-x-reverse">
-                        <i className="bi bi-globe"></i>
-                        <span>{activity.ipAddress}</span>
-                      </div>
-                      {activity.resourceId && (
+                    {activity.resourceId && (
+                      <div className="flex items-center space-x-4 space-x-reverse text-xs text-muted-foreground">
                         <div className="flex items-center space-x-1 space-x-reverse">
                           <i className="bi bi-link-45deg"></i>
-                          <span>معرف المورد: {activity.resourceId}</span>
+                          <span>المعرف: {activity.resourceId}</span>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))

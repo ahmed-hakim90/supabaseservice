@@ -236,13 +236,20 @@ export default function ProductsManagement() {
     e.preventDefault();
     if (!sparePartFormData.name || !sparePartFormData.partNumber) return;
 
+    // Clean the form data - convert "none" to null
+    const cleanFormData = {
+      ...sparePartFormData,
+      categoryId: sparePartFormData.categoryId === "none" ? null : sparePartFormData.categoryId,
+      productId: sparePartFormData.productId === "none" ? null : sparePartFormData.productId,
+    };
+
     if (editingSparePart) {
       updateSparePartMutation.mutate({
         id: editingSparePart.id,
-        data: sparePartFormData
+        data: cleanFormData
       });
     } else {
-      createSparePartMutation.mutate(sparePartFormData as InsertSparePart);
+      createSparePartMutation.mutate(cleanFormData as InsertSparePart);
     }
   };
 

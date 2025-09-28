@@ -18,7 +18,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
     // Create socket connection
     const socketUrl = process.env.NODE_ENV === 'development' 
-      ? 'http://localhost:3000' 
+      ? window.location.origin  // Use same origin (vite proxy will handle routing)
       : window.location.origin;
     
     const socket = io(socketUrl, {

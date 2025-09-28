@@ -19,6 +19,7 @@ import {
   insertProductInventorySchema,
   insertPartsTransferSchema,
   insertActivityLogSchema,
+  insertWarehousePermissionSchema,
   type User,
 } from "@shared/schema";
 
@@ -119,6 +120,163 @@ function filterDataForUser(
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+
+  // خصم قطعة غيار وتحويل للهالك عند تنفيذ طلب صيانة
+  app.post("/api/spare-parts/consume", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+
+      const { warehouseId, centerId, sparePartId, serviceRequestId, quantity } = req.body;
+      if (!warehouseId || !centerId || !sparePartId || !serviceRequestId || !quantity) {
+        return res.status(400).json({ message: "بيانات ناقصة" });
+      }
+
+      // تحقق من توفر الكمية
+      const inventoryItem = await storage.getInventory().then(items => items.find(i => i.warehouseId === warehouseId && i.sparePartId === sparePartId));
+      if (!inventoryItem || inventoryItem.quantity < quantity) {
+        return res.status(400).json({ message: "الكمية غير متوفرة في المخزن" });
+      }
+
+      // خصم الكمية من المخزن
+      await storage.updateInventoryItem(inventoryItem.id, { quantity: inventoryItem.quantity - quantity });
+
+      // إضافة للهالك
+      await storage.createSparePartsScrap({
+        centerId,
+        warehouseId,
+        sparePartId,
+        serviceRequestId,
+        technicianId: currentUser.id,
+        quantity
+      });
+
+      // تسجيل العملية في سجل النشاطات
+      await storage.logActivity({
+        userId: currentUser.id,
+        action: "consume_spare_part",
+        entityType: "spare_part",
+        entityId: sparePartId,
+        description: `تم خصم ${quantity} من قطعة الغيار وتحويلها للهالك لطلب صيانة ${serviceRequestId}`,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error in /api/spare-parts/consume", error);
+      res.status(500).json({ message: "خطأ في الخادم" });
+    }
+  });
+
+  // تسجيل نقص في قطعة غيار
+  app.post("/api/spare-parts/shortage", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+
+      const { centerId, warehouseId, sparePartId, quantityNeeded } = req.body;
+      if (!centerId || !warehouseId || !sparePartId || !quantityNeeded) {
+        return res.status(400).json({ message: "بيانات ناقصة" });
+      }
+
+      const shortage = await storage.createSparePartsShortage({
+        centerId,
+        warehouseId,
+        sparePartId,
+        quantityNeeded,
+        status: "open"
+      });
+
+      // تسجيل العملية في سجل النشاطات
+      await storage.logActivity({
+        userId: currentUser.id,
+        action: "report_spare_part_shortage",
+        entityType: "spare_part",
+        entityId: sparePartId,
+        description: `تم تسجيل نقص في قطعة الغيار (${sparePartId}) بكمية ${quantityNeeded}`,
+      });
+
+      res.status(201).json(shortage);
+    } catch (error) {
+      console.error("Error in /api/spare-parts/shortage", error);
+      res.status(500).json({ message: "خطأ في الخادم" });
+    }
+  });
+
+  // تحديث حالة النقص (resolve)
+  app.patch("/api/spare-parts/shortage/:id/resolve", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+
+      const { id } = req.params;
+      const shortage = await storage.resolveSparePartsShortage(id);
+
+      // تسجيل العملية في سجل النشاطات
+      await storage.logActivity({
+        userId: currentUser.id,
+        action: "resolve_spare_part_shortage",
+        entityType: "spare_part",
+        entityId: shortage.sparePartId,
+        description: `تم حل النقص في قطعة الغيار (${shortage.sparePartId})`,
+      });
+
+      res.json(shortage);
+    } catch (error) {
+      console.error("Error in /api/spare-parts/shortage/:id/resolve", error);
+      res.status(500).json({ message: "خطأ في الخادم" });
+    }
+  });
+
+  // جلب كل النواقص للعرض في Dashboard
+  app.get("/api/spare-parts/shortages", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+
+      const shortages = await storage.getSparePartsShortages();
+      res.json(shortages);
+    } catch (error) {
+      console.error("Error in /api/spare-parts/shortages", error);
+      res.status(500).json({ message: "خطأ في الخادم" });
+    }
+  });
+
+  // بيع قطعة غيار (خصم فقط بدون تحويل للهالك)
+  app.post("/api/spare-parts/sell", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+
+      const { warehouseId, sparePartId, quantity, customerName, salePrice } = req.body;
+      if (!warehouseId || !sparePartId || !quantity || !customerName) {
+        return res.status(400).json({ message: "بيانات ناقصة" });
+      }
+
+      // تحقق من توفر الكمية
+      const inventoryItems = await storage.getInventory();
+      const inventoryItem = inventoryItems.find(i => i.warehouseId === warehouseId && i.sparePartId === sparePartId);
+      if (!inventoryItem || inventoryItem.quantity < quantity) {
+        return res.status(400).json({ message: "الكمية غير متوفرة في المخزن" });
+      }
+
+      // خصم الكمية من المخزن فقط (بدون تحويل للهالك)
+      await storage.updateInventoryItem(inventoryItem.id, { quantity: inventoryItem.quantity - quantity });
+
+      // تسجيل العملية في سجل النشاطات
+      await storage.logActivity({
+        userId: currentUser.id,
+        action: "sell_spare_part",
+        entityType: "spare_part",
+        entityId: sparePartId,
+        description: `تم بيع ${quantity} من قطعة الغيار للعميل ${customerName} بسعر ${salePrice || 'غير محدد'}`,
+      });
+
+      res.json({ success: true, message: "تم البيع بنجاح" });
+    } catch (error) {
+      console.error("Error in /api/spare-parts/sell", error);
+      res.status(500).json({ message: "خطأ في الخادم" });
+    }
+  });
   // Authentication routes
   app.post("/api/auth/login", async (req, res) => {
     try {
@@ -841,11 +999,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
       }
 
-      // Check if user can add follow-ups (only technicians)
-      if (currentUser.role !== "technician") {
+      // Check if user can add follow-ups (technicians, managers, and admins)
+      if (!["technician", "manager", "admin"].includes(currentUser.role)) {
         return res
           .status(403)
-          .json({ message: "فقط الفنيين يمكنهم إضافة متابعات" });
+          .json({ message: "فقط الفنيين والمديرين والإدارة يمكنهم إضافة متابعات" });
       }
 
       // Check if this service request exists and is assigned to the technician
@@ -854,15 +1012,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "طلب الصيانة غير موجود" });
       }
 
-      if (serviceRequest.technicianId !== currentUser.id) {
-        return res
-          .status(403)
-          .json({ message: "يمكنك إضافة متابعات فقط للطلبات المسندة إليك" });
+      // Check permission based on role
+      if (currentUser.role === "technician") {
+        // Technicians can only add follow-ups to requests assigned to them
+        if (serviceRequest.technicianId !== currentUser.id) {
+          return res
+            .status(403)
+            .json({ message: "يمكنك إضافة متابعات فقط للطلبات المسندة إليك" });
+        }
+      } else if (currentUser.role === "manager") {
+        // Managers can add follow-ups to requests in their center
+        if (serviceRequest.centerId !== currentUser.centerId) {
+          return res
+            .status(403)
+            .json({ message: "يمكنك إضافة متابعات فقط للطلبات في مركزك" });
+        }
       }
+      // Admins can add follow-ups to any request
 
       const followUpData = insertServiceRequestFollowUpSchema.parse({
         serviceRequestId: req.params.id,
-        technicianId: currentUser.id,
+        technicianId: currentUser.id, // المتابعة تُسجل باسم المستخدم الحالي
         followUpText: req.body.followUpText,
         newStatus: req.body.newStatus,
       });
@@ -1060,10 +1230,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "ليس لديك صلاحية لإضافة قطع الغيار" });
       }
 
-      const sparePartData = insertSparePartSchema.parse(req.body);
+      // Parse the request body that includes both spare part and inventory data
+      const requestData = z.object({
+        // Spare part data
+        name: z.string().min(1, "اسم قطعة الغيار مطلوب"),
+        partNumber: z.string().min(1, "رقم القطعة مطلوب"),
+        // These are UUIDs (nullable). Accept empty string or 'none' as null.
+        categoryId: z.string().optional().transform(val => {
+          if (val === undefined || val === null || val === '' || val === 'none') return null;
+          return val; // keep UUID string
+        }).nullable(),
+        productId: z.string().optional().transform(val => {
+          if (val === undefined || val === null || val === '' || val === 'none') return null;
+          return val;
+        }).nullable().optional(),
+        price: z.number().min(0, "السعر يجب أن يكون أكبر من أو يساوي 0"),
+        description: z.string().optional(),
+        // Inventory data (optional - if not provided, no inventory will be created)
+        inventory: z.object({
+          warehouseId: z.string().min(1, "معرف المستودع مطلوب"), // Change to string
+          quantity: z.number().min(0, "الكمية يجب أن تكون أكبر من أو تساوي 0"),
+          minQuantity: z.number().min(0, "الحد الأدنى للكمية يجب أن يكون أكبر من أو يساوي 0").optional()
+        }).optional()
+      }).parse(req.body);
+
+      console.log("📥 Received spare part data:", JSON.stringify(requestData, null, 2));
+
+      // Extract spare part data
+      const sparePartData = {
+        name: requestData.name,
+        partNumber: requestData.partNumber,
+        categoryId: requestData.categoryId,
+        productId: requestData.productId,
+        price: requestData.price,
+        description: requestData.description
+      };
+
       const sparePart = await storage.createSparePart(sparePartData);
 
-      // Log activity
+      // Create inventory record if inventory data is provided
+      if (requestData.inventory) {
+        console.log("📦 Creating inventory record with data:", requestData.inventory);
+        const inventoryData = {
+          sparePartId: sparePart.id,
+          warehouseId: requestData.inventory.warehouseId.toString(), // Convert to string
+          quantity: requestData.inventory.quantity,
+          minQuantity: requestData.inventory.minQuantity || 5 // Default minimum quantity
+        };
+
+        console.log("📦 Final inventory data:", inventoryData);
+        const inventoryResult = await storage.createInventoryItem(inventoryData);
+        console.log("✅ Inventory created successfully:", inventoryResult);
+
+        // Log inventory creation activity
+        await storage.logActivity({
+          userId: currentUser.id,
+          action: "create",
+          entityType: "inventory",
+          entityId: sparePart.id,
+          description: `تم إنشاء سجل مخزون لقطعة الغيار: ${sparePart.name} بكمية ${requestData.inventory.quantity} في المستودع`,
+        });
+      } else {
+        console.log("⚠️ No inventory data provided - no inventory record will be created");
+      }
+
+      // Log spare part creation activity
       await storage.logActivity({
         userId: currentUser.id,
         action: "create",
@@ -1089,6 +1320,150 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .json({ message: "بيانات غير صحيحة", errors: error.errors });
       }
       res.status(500).json({ message: "خطأ في إضافة قطعة الغيار" });
+    }
+  });
+
+  // Get inventory records
+  app.get("/api/inventory", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      const inventoryRecords = await storage.getInventory();
+      res.json(inventoryRecords);
+    } catch (error) {
+      console.error("Get inventory error:", error);
+      res.status(500).json({ message: "خطأ في جلب بيانات المخزون" });
+    }
+  });
+
+  // Create inventory record for existing spare part
+  app.post("/api/spare-parts/:id/inventory", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      // Only warehouse managers, managers and admins can create inventory
+      if (!["warehouse_manager", "manager", "admin"].includes(currentUser.role)) {
+        return res.status(403).json({ message: "ليس لديك صلاحية لإدارة المخزون" });
+      }
+
+      const { id: sparePartId } = req.params;
+      const { warehouseId, quantity, minQuantity } = req.body;
+
+      if (!warehouseId || quantity === undefined) {
+        return res.status(400).json({ message: "بيانات المخزون ناقصة" });
+      }
+
+      const inventoryData = {
+        sparePartId,
+        warehouseId,
+        quantity: parseInt(quantity) || 0,
+        minQuantity: parseInt(minQuantity) || 5
+      };
+
+      const inventoryResult = await storage.createInventoryItem(inventoryData);
+
+      // Log activity
+      await storage.logActivity({
+        userId: currentUser.id,
+        action: "create",
+        entityType: "inventory",
+        entityId: sparePartId,
+        description: `تم إنشاء سجل مخزون لقطعة الغيار بكمية ${quantity} في المستودع`,
+      });
+
+      res.status(201).json(inventoryResult);
+    } catch (error) {
+      console.error("Create inventory error:", error);
+      res.status(500).json({ message: "خطأ في إنشاء سجل المخزون" });
+    }
+  });
+
+  // Fix existing spare parts without inventory records
+  app.post("/api/spare-parts/fix-inventory", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      // Only admins can run this fix
+      if (currentUser.role !== "admin") {
+        return res.status(403).json({ message: "يتطلب صلاحيات المدير" });
+      }
+
+      const { defaultWarehouseId = "f8442b7f-9455-4f0a-8ef2-e7cac45c9eb4" } = req.body;
+
+      // Get all spare parts
+      const allSpareParts = await storage.getAllSpareParts();
+      // Get all inventory records
+      const allInventory = await storage.getInventory();
+
+      let fixedCount = 0;
+      const results = [];
+
+      for (const sparePart of allSpareParts) {
+        // Check if this spare part has any inventory record
+        const hasInventory = allInventory.some(inv => inv.sparePartId === sparePart.id);
+        
+        if (!hasInventory) {
+          try {
+            const inventoryData = {
+              sparePartId: sparePart.id,
+              warehouseId: defaultWarehouseId,
+              quantity: 0, // Start with 0
+              minQuantity: 5 // Default minimum
+            };
+
+            const inventoryResult = await storage.createInventoryItem(inventoryData);
+            
+            // Log activity
+            await storage.logActivity({
+              userId: currentUser.id,
+              action: "fix",
+              entityType: "inventory",
+              entityId: sparePart.id,
+              description: `تم إصلاح سجل المخزون لقطعة الغيار: ${sparePart.name}`,
+            });
+
+            results.push({
+              sparePartId: sparePart.id,
+              sparePartName: sparePart.name,
+              status: "fixed",
+              inventory: inventoryResult
+            });
+            fixedCount++;
+          } catch (error) {
+            results.push({
+              sparePartId: sparePart.id,
+              sparePartName: sparePart.name,
+              status: "error",
+              error: (error as any)?.message || 'unknown'
+            });
+          }
+        } else {
+          results.push({
+            sparePartId: sparePart.id,
+            sparePartName: sparePart.name,
+            status: "already_has_inventory"
+          });
+        }
+      }
+
+      res.json({
+        message: `تم إصلاح ${fixedCount} قطعة غيار`,
+        fixedCount,
+        totalParts: allSpareParts.length,
+        results
+      });
+    } catch (error) {
+      console.error("Fix inventory error:", error);
+      res.status(500).json({ message: "خطأ في إصلاح سجلات المخزون" });
     }
   });
 
@@ -1781,6 +2156,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get service requests with follow-ups error:", error);
       res.status(500).json({ message: "خطأ في جلب بيانات طلبات الصيانة" });
+    }
+  });
+
+  // Get single service request with full details
+  app.get("/api/service-requests/:id/details", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      const serviceRequestDetails = await storage.getServiceRequestWithDetails(req.params.id);
+      
+      if (!serviceRequestDetails) {
+        return res.status(404).json({ message: "طلب الصيانة غير موجود" });
+      }
+
+      // Check permissions based on user role
+      let hasAccess = false;
+      
+      if (currentUser.role === "admin" || currentUser.role === "manager") {
+        hasAccess = true;
+      } else if (currentUser.role === "technician") {
+        hasAccess = serviceRequestDetails.technician?.id === currentUser.id;
+      } else if (currentUser.role === "receptionist") {
+        hasAccess = serviceRequestDetails.serviceCenter?.id === currentUser.centerId;
+      } else if (currentUser.role === "customer") {
+        hasAccess = serviceRequestDetails.customer?.id === currentUser.id;
+      }
+      
+      if (!hasAccess) {
+        return res.status(403).json({ message: "ليس لديك صلاحية لعرض هذا الطلب" });
+      }
+
+      res.json(serviceRequestDetails);
+    } catch (error) {
+      console.error("Get service request details error:", error);
+      res.status(500).json({ message: "خطأ في جلب تفاصيل طلب الصيانة" });
     }
   });
 
@@ -2508,6 +2921,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // Simple health check without auth
+  app.get("/health", (req, res) => {
+    res.json({ 
+      status: "ok", 
+      server: "running",
+      timestamp: new Date().toISOString() 
+    });
+  });
+
   // Test page endpoint
   app.get("/test", (req, res) => {
     res.send(`
@@ -2772,6 +3194,558 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get warehouse users error:", error);
       res.status(500).json({ message: "خطأ في جلب مستخدمي المخزن" });
+    }
+  });
+
+  // Get spare parts with inventory for current user's warehouse
+  app.get("/api/spare-parts-with-inventory", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser || !currentUser.warehouseId) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول ووجود مخزن مخصص" });
+      }
+
+      const sparePartsWithInventory = await storage.getSparePartsWithInventory(currentUser.warehouseId);
+      res.json(sparePartsWithInventory);
+    } catch (error) {
+      console.error("Get spare parts with inventory error:", error);
+      res.status(500).json({ message: "خطأ في جلب قطع الغيار مع المخزون" });
+    }
+  });
+
+  // Sales endpoints
+  app.post("/api/sales", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول" });
+      }
+
+      const saleData = {
+        ...req.body,
+        technicianId: currentUser.id,
+        centerId: currentUser.centerId,
+        warehouseId: currentUser.warehouseId,
+      };
+
+      const sale = await storage.createSale(saleData);
+
+      await storage.createActivityLog({
+        userId: currentUser.id,
+        action: "create",
+        entityType: "sale",
+        entityId: sale.id,
+        description: `تم إنشاء فاتورة بيع بمبلغ ${saleData.totalAmount}`,
+      });
+
+  // Use activity-logged event to refresh dashboards (no dedicated sale-created event type defined)
+  broadcastEvent('activity-logged', { sale, type: 'sale-created' }, { toAll: true });
+
+      res.json(sale);
+    } catch (error) {
+      console.error("Create sale error:", error);
+      res.status(500).json({ message: "خطأ في إنشاء فاتورة البيع" });
+    }
+  });
+
+  app.get("/api/sales", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول" });
+      }
+
+  const sales = await storage.getSales(currentUser.centerId || undefined);
+      res.json(sales);
+    } catch (error) {
+      console.error("Get sales error:", error);
+      res.status(500).json({ message: "خطأ في جلب المبيعات" });
+    }
+  });
+
+  app.get("/api/sales/:saleId", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول" });
+      }
+
+      const { saleId } = req.params;
+      const sale = await storage.getSaleDetails(saleId);
+      
+      if (!sale) {
+        return res.status(404).json({ message: "فاتورة البيع غير موجودة" });
+      }
+
+      res.json(sale);
+    } catch (error) {
+      console.error("Get sale details error:", error);
+      res.status(500).json({ message: "خطأ في جلب تفاصيل فاتورة البيع" });
+    }
+  });
+
+  // Warehouse Permissions API
+  app.get("/api/warehouse-permissions", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      const allPermissions = await storage.getAllWarehousePermissions();
+      let filteredPermissions = allPermissions;
+
+      // Filter based on role
+      if (currentUser.role === "manager") {
+        // Manager can see permissions from their center's warehouses
+        filteredPermissions = allPermissions.filter(
+          (permission) => permission.warehouse?.centerId === currentUser.centerId
+        );
+      } else if (currentUser.role === "warehouse_manager") {
+        // Warehouse manager can see permissions from their warehouse only
+        filteredPermissions = allPermissions.filter(
+          (permission) => permission.warehouseId === currentUser.warehouseId
+        );
+      }
+
+      res.json(filteredPermissions);
+    } catch (error) {
+      console.error("Get warehouse permissions error:", error);
+      res.status(500).json({ message: "خطأ في جلب أذونات المخزن" });
+    }
+  });
+
+  app.get("/api/warehouse-permissions/:id", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      const permission = await storage.getWarehousePermission(req.params.id);
+      if (!permission) {
+        return res.status(404).json({ message: "الإذن غير موجود" });
+      }
+
+      // Check access based on role
+      if (currentUser.role === "manager" && permission.warehouse?.centerId !== currentUser.centerId) {
+        return res.status(403).json({ message: "ليس لديك صلاحية للوصول لهذا الإذن" });
+      } else if (currentUser.role === "warehouse_manager" && permission.warehouseId !== currentUser.warehouseId) {
+        return res.status(403).json({ message: "ليس لديك صلاحية للوصول لهذا الإذن" });
+      }
+
+      res.json(permission);
+    } catch (error) {
+      console.error("Get warehouse permission error:", error);
+      res.status(500).json({ message: "خطأ في جلب الإذن" });
+    }
+  });
+
+  app.post("/api/warehouse-permissions", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      // Check permissions
+      if (!["admin", "manager", "warehouse_manager"].includes(currentUser.role)) {
+        return res.status(403).json({ message: "ليس لديك صلاحية لإنشاء أذونات المخزن" });
+      }
+
+      // Generate permission number
+      const permissionNumber = await storage.generatePermissionNumber();
+
+      const permissionData = {
+        ...req.body,
+        permissionNumber,
+        requestedBy: currentUser.id,
+        status: "pending"
+      };
+
+      const permission = await storage.createWarehousePermission(permissionData);
+
+      // Log activity
+      await storage.createActivityLog({
+        userId: currentUser.id,
+        action: "create",
+        entityType: "warehouse_permission",
+        entityId: permission.id,
+        description: `إنشاء إذن ${permissionData.type === 'addition' ? 'إضافة' : 'صرف'} رقم ${permissionNumber}`
+      });
+
+      res.status(201).json(permission);
+    } catch (error) {
+      console.error("Create warehouse permission error:", error);
+      res.status(500).json({ message: "خطأ في إنشاء الإذن" });
+    }
+  });
+
+  app.put("/api/warehouse-permissions/:id", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      const permission = await storage.getWarehousePermission(req.params.id);
+      if (!permission) {
+        return res.status(404).json({ message: "الإذن غير موجود" });
+      }
+
+      // Check permissions
+      if (!["admin", "manager", "warehouse_manager"].includes(currentUser.role)) {
+        return res.status(403).json({ message: "ليس لديك صلاحية لتحديث أذونات المخزن" });
+      }
+
+      const updateData = req.body;
+
+      // If approving/rejecting, set appropriate fields
+      if (updateData.status === "approved") {
+        updateData.approvedBy = currentUser.id;
+        updateData.approvedAt = new Date();
+      } else if (updateData.status === "executed") {
+        updateData.executedBy = currentUser.id;
+        updateData.executedAt = new Date();
+
+        // Update inventory if permission is executed
+        if (permission.type === "addition") {
+          // Add to inventory
+          const existingInventory = await storage.getInventoryByWarehouseAndSparePart(
+            permission.warehouseId,
+            permission.sparePartId
+          );
+
+          if (existingInventory) {
+            await storage.updateInventory(existingInventory.id, {
+              quantity: existingInventory.quantity + permission.quantity
+            });
+          } else {
+            await storage.createInventory({
+              warehouseId: permission.warehouseId,
+              sparePartId: permission.sparePartId,
+              quantity: permission.quantity,
+              minStock: 10 // Default minimum stock
+            });
+          }
+        } else if (permission.type === "withdrawal") {
+          // Remove from inventory
+          const existingInventory = await storage.getInventoryByWarehouseAndSparePart(
+            permission.warehouseId,
+            permission.sparePartId
+          );
+
+          if (existingInventory && existingInventory.quantity >= permission.quantity) {
+            await storage.updateInventory(existingInventory.id, {
+              quantity: existingInventory.quantity - permission.quantity
+            });
+          } else {
+            return res.status(400).json({ 
+              message: "الكمية غير متوفرة في المخزن" 
+            });
+          }
+        }
+      }
+
+      const updatedPermission = await storage.updateWarehousePermission(req.params.id, updateData);
+
+      // Log activity
+      await storage.createActivityLog({
+        userId: currentUser.id,
+        action: "update",
+        entityType: "warehouse_permission",
+        entityId: req.params.id,
+        description: `تحديث إذن رقم ${permission.permissionNumber} - الحالة: ${updateData.status}`
+      });
+
+      res.json(updatedPermission);
+    } catch (error) {
+      console.error("Update warehouse permission error:", error);
+      res.status(500).json({ message: "خطأ في تحديث الإذن" });
+    }
+  });
+
+  app.delete("/api/warehouse-permissions/:id", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      const permission = await storage.getWarehousePermission(req.params.id);
+      if (!permission) {
+        return res.status(404).json({ message: "الإذن غير موجود" });
+      }
+
+      // Only admin or the requester can delete if status is pending
+      if (permission.status !== "pending" || 
+          (currentUser.role !== "admin" && currentUser.id !== permission.requestedBy)) {
+        return res.status(403).json({ message: "لا يمكن حذف هذا الإذن" });
+      }
+
+      await storage.deleteWarehousePermission(req.params.id);
+
+      // Log activity
+      await storage.createActivityLog({
+        userId: currentUser.id,
+        action: "delete",
+        entityType: "warehouse_permission",
+        entityId: req.params.id,
+        description: `حذف إذن رقم ${permission.permissionNumber}`
+      });
+
+      res.json({ message: "تم حذف الإذن بنجاح" });
+    } catch (error) {
+      console.error("Delete warehouse permission error:", error);
+      res.status(500).json({ message: "خطأ في حذف الإذن" });
+    }
+  });
+
+  // Parts Transfers API
+  app.get("/api/parts-transfers", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      const allTransfers = await storage.getAllPartsTransfers();
+      let filteredTransfers = allTransfers;
+
+      // Filter based on role
+      if (currentUser.role === "manager") {
+        // Manager can see transfers from/to their center's warehouses
+        filteredTransfers = allTransfers.filter(
+          (transfer) => transfer.fromWarehouse?.centerId === currentUser.centerId ||
+                       transfer.toWarehouse?.centerId === currentUser.centerId
+        );
+      } else if (currentUser.role === "warehouse_manager") {
+        // Warehouse manager can see transfers from/to their warehouse only
+        filteredTransfers = allTransfers.filter(
+          (transfer) => transfer.fromWarehouseId === currentUser.warehouseId ||
+                       transfer.toWarehouseId === currentUser.warehouseId
+        );
+      }
+
+      res.json(filteredTransfers);
+    } catch (error) {
+      console.error("Get parts transfers error:", error);
+      res.status(500).json({ message: "خطأ في جلب تحويلات قطع الغيار" });
+    }
+  });
+
+  app.get("/api/parts-transfers/:id", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      const transfer = await storage.getPartsTransferWithWarehouses(req.params.id);
+      if (!transfer) {
+        return res.status(404).json({ message: "التحويل غير موجود" });
+      }
+      // Access control with proper warehouse center check
+      if (currentUser.role === "manager") {
+        const cId = currentUser.centerId;
+        if (!cId || (
+          transfer.fromWarehouse?.centerId !== cId &&
+          transfer.toWarehouse?.centerId !== cId
+        )) {
+          return res.status(403).json({ message: "ليس لديك صلاحية للوصول لهذا التحويل" });
+        }
+      } else if (currentUser.role === "warehouse_manager") {
+        const wId = currentUser.warehouseId;
+        if (!wId || (
+          transfer.fromWarehouseId !== wId &&
+          transfer.toWarehouseId !== wId
+        )) {
+          return res.status(403).json({ message: "ليس لديك صلاحية للوصول لهذا التحويل" });
+        }
+      }
+
+      res.json(transfer);
+    } catch (error) {
+      console.error("Get parts transfer error:", error);
+      res.status(500).json({ message: "خطأ في جلب التحويل" });
+    }
+  });
+
+  app.post("/api/parts-transfers", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      // Check permissions
+      if (!["admin", "manager", "warehouse_manager"].includes(currentUser.role)) {
+        return res.status(403).json({ message: "ليس لديك صلاحية لإنشاء تحويلات قطع الغيار" });
+      }
+
+      // Generate transfer number
+      const transferNumber = await storage.generateTransferNumber();
+
+      const transferData = {
+        ...req.body,
+        transferNumber,
+        requestedBy: currentUser.id,
+        status: "pending"
+      };
+
+      const transfer = await storage.createPartsTransfer(transferData);
+
+      // Log activity
+      await storage.createActivityLog({
+        userId: currentUser.id,
+        action: "create",
+        entityType: "parts_transfer",
+        entityId: transfer.id,
+        description: `إنشاء تحويل قطع غيار رقم ${transferNumber}`
+      });
+
+      // Broadcast real-time event
+      broadcastEvent('transfer-created', { transfer }, { toAll: true });
+
+      res.status(201).json(transfer);
+    } catch (error) {
+      console.error("Create parts transfer error:", error);
+      res.status(500).json({ message: "خطأ في إنشاء التحويل" });
+    }
+  });
+
+  app.put("/api/parts-transfers/:id", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      const transfer = await storage.getPartsTransfer(req.params.id);
+      if (!transfer) {
+        return res.status(404).json({ message: "التحويل غير موجود" });
+      }
+
+      // Check permissions - managers can approve, warehouse_managers can execute
+      if (!["admin", "manager", "warehouse_manager"].includes(currentUser.role)) {
+        return res.status(403).json({ message: "ليس لديك صلاحية لتحديث تحويلات قطع الغيار" });
+      }
+
+      const updateData = req.body;
+
+      // Role-based action restrictions
+      if (updateData.status === "approved") {
+        // Only admin and manager can approve
+        if (!["admin", "manager"].includes(currentUser.role)) {
+          return res.status(403).json({ message: "ليس لديك صلاحية لاعتماد التحويلات" });
+        }
+        updateData.approvedBy = currentUser.id;
+        updateData.approvedAt = new Date();
+      } else if (updateData.status === "completed") {
+        // Only admin and warehouse_manager can execute/complete
+        if (!["admin", "warehouse_manager"].includes(currentUser.role)) {
+          return res.status(403).json({ message: "ليس لديك صلاحية لتنفيذ التحويلات" });
+        }
+        updateData.executedBy = currentUser.id;
+        updateData.completedAt = new Date();
+
+        // Update inventories
+        // Remove from source warehouse
+        const fromInventory = await storage.getInventoryByWarehouseAndSparePart(
+          transfer.fromWarehouseId,
+          transfer.sparePartId
+        );
+
+        if (fromInventory && fromInventory.quantity >= transfer.quantity) {
+          await storage.updateInventory(fromInventory.id, {
+            quantity: fromInventory.quantity - transfer.quantity
+          });
+        } else {
+          return res.status(400).json({ 
+            message: "الكمية غير متوفرة في المخزن المصدر" 
+          });
+        }
+
+        // Add to destination warehouse
+        const toInventory = await storage.getInventoryByWarehouseAndSparePart(
+          transfer.toWarehouseId,
+          transfer.sparePartId
+        );
+
+        if (toInventory) {
+          await storage.updateInventory(toInventory.id, {
+            quantity: toInventory.quantity + transfer.quantity
+          });
+        } else {
+          await storage.createInventory({
+            warehouseId: transfer.toWarehouseId,
+            sparePartId: transfer.sparePartId,
+            quantity: transfer.quantity,
+            minStock: 10 // Default minimum stock
+          });
+        }
+      }
+
+      const updatedTransfer = await storage.updatePartsTransfer(req.params.id, updateData);
+
+      // Log activity
+      await storage.createActivityLog({
+        userId: currentUser.id,
+        action: "update",
+        entityType: "parts_transfer",
+        entityId: req.params.id,
+        description: `تحديث تحويل رقم ${transfer.transferNumber} - الحالة: ${updateData.status}`
+      });
+
+      // Broadcast real-time event
+      if (updateData.status === "approved") {
+        broadcastEvent('transfer-approved', { transfer: updatedTransfer }, { toAll: true });
+      } else if (updateData.status === "completed") {
+        broadcastEvent('transfer-completed', { transfer: updatedTransfer }, { toAll: true });
+      } else {
+        broadcastEvent('transfer-updated', { transfer: updatedTransfer }, { toAll: true });
+      }
+
+      res.json(updatedTransfer);
+    } catch (error) {
+      console.error("Update parts transfer error:", error);
+      res.status(500).json({ message: "خطأ في تحديث التحويل" });
+    }
+  });
+
+  app.delete("/api/parts-transfers/:id", async (req, res) => {
+    try {
+      const currentUser = await getCurrentUser(req);
+      if (!currentUser) {
+        return res.status(401).json({ message: "يجب تسجيل الدخول أولاً" });
+      }
+
+      const transfer = await storage.getPartsTransfer(req.params.id);
+      if (!transfer) {
+        return res.status(404).json({ message: "التحويل غير موجود" });
+      }
+
+      // Only admin or the requester can delete if status is pending
+      if (transfer.status !== "pending" || 
+          (currentUser.role !== "admin" && currentUser.id !== transfer.requestedBy)) {
+        return res.status(403).json({ message: "لا يمكن حذف هذا التحويل" });
+      }
+
+      await storage.deletePartsTransfer(req.params.id);
+
+      // Log activity
+      await storage.createActivityLog({
+        userId: currentUser.id,
+        action: "delete",
+        entityType: "parts_transfer",
+        entityId: req.params.id,
+        description: `حذف تحويل رقم ${transfer.transferNumber}`
+      });
+
+      res.json({ message: "تم حذف التحويل بنجاح" });
+    } catch (error) {
+      console.error("Delete parts transfer error:", error);
+      res.status(500).json({ message: "خطأ في حذف التحويل" });
     }
   });
 

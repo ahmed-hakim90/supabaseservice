@@ -103,6 +103,7 @@ export interface IStorage {
   getActivityLogs(): Promise<ActivityLog[]>;
   getActivityLog(id: string): Promise<ActivityLog | undefined>;
   createActivityLog(log: InsertActivityLog): Promise<ActivityLog>;
+  logActivity(activity: InsertActivityLog): Promise<ActivityLog>;
   
   // Additional methods
   createUserApproval(approvalData: any): Promise<any>;
@@ -111,94 +112,22 @@ export interface IStorage {
   approveUser(userId: string, approvalData: any): Promise<User>;
   getUsersByWarehouse(warehouseId: string): Promise<User[]>;
   getWarehouseSpareParts(warehouseId: string): Promise<any[]>;
+  
+  // Spare Parts Scrap and Shortage
+  getSparePartsScrap(): Promise<any[]>;
+  createSparePartsScrap(scrapData: any): Promise<any>;
+  getSparePartsShortages(): Promise<any[]>;
+  createSparePartsShortage(shortageData: any): Promise<any>;
+  resolveSparePartsShortage(id: string): Promise<any>;
 }
 import { db } from "./db";
 import { 
   users, serviceCenters, customers, categories, products, 
   serviceRequests, serviceRequestFollowUps, warehouses, 
   spareParts, inventory, productInventory, partsTransfers, 
-  activityLogs, userApprovals
+  activityLogs, userApprovals, sparePartsScrap, sparePartsShortages
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
-
-export interface IStorage {
-  // Users
-  getUser(id: string): Promise<User | undefined>;
-  getUserByEmail(email: string): Promise<User | undefined>;
-  getAllUsers(): Promise<User[]>;
-  createUser(user: InsertUser): Promise<User>;
-  updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
-  deleteUser(id: string): Promise<void>;
-
-  // Service Centers
-  getAllServiceCenters(): Promise<ServiceCenter[]>;
-  getServiceCenter(id: string): Promise<ServiceCenter | undefined>;
-  createServiceCenter(center: InsertServiceCenter): Promise<ServiceCenter>;
-  updateServiceCenter(id: string, center: Partial<InsertServiceCenter>): Promise<ServiceCenter>;
-  deleteServiceCenter(id: string): Promise<void>;
-
-  // Customers
-  getAllCustomers(): Promise<Customer[]>;
-  getCustomer(id: string): Promise<Customer | undefined>;
-  createCustomer(customer: InsertCustomer): Promise<Customer>;
-  updateCustomer(id: string, customer: Partial<InsertCustomer>): Promise<Customer>;
-  deleteCustomer(id: string): Promise<void>;
-
-  // Categories
-  getAllCategories(): Promise<Category[]>;
-  getCategory(id: string): Promise<Category | undefined>;
-  createCategory(category: InsertCategory): Promise<Category>;
-  updateCategory(id: string, category: Partial<InsertCategory>): Promise<Category>;
-  deleteCategory(id: string): Promise<void>;
-
-  // Products
-  getAllProducts(): Promise<Product[]>;
-  getProduct(id: string): Promise<Product | undefined>;
-  createProduct(product: InsertProduct): Promise<Product>;
-  updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product>;
-  deleteProduct(id: string): Promise<void>;
-
-  // Service Requests
-  getAllServiceRequests(): Promise<ServiceRequest[]>;
-  getServiceRequest(id: string): Promise<ServiceRequest | undefined>;
-  createServiceRequest(request: InsertServiceRequest): Promise<ServiceRequest>;
-  updateServiceRequest(id: string, request: Partial<InsertServiceRequest>): Promise<ServiceRequest>;
-  deleteServiceRequest(id: string): Promise<void>;
-
-  // Service Request Follow-ups
-  getServiceRequestFollowUps(serviceRequestId: string): Promise<ServiceRequestFollowUp[]>;
-  createServiceRequestFollowUp(followUp: InsertServiceRequestFollowUp): Promise<ServiceRequestFollowUp>;
-
-  // Warehouses
-  getAllWarehouses(): Promise<Warehouse[]>;
-  getWarehouse(id: string): Promise<Warehouse | undefined>;
-  createWarehouse(warehouse: InsertWarehouse): Promise<Warehouse>;
-  updateWarehouse(id: string, warehouse: Partial<InsertWarehouse>): Promise<Warehouse>;
-  deleteWarehouse(id: string): Promise<void>;
-
-  // Dashboard Stats
-  getDashboardStats(): Promise<any>;
-  getRecentServiceRequests(): Promise<any[]>;
-  getRecentActivities(): Promise<ActivityLog[]>;
-
-  // Activity Logs
-  logActivity(activity: InsertActivityLog): Promise<ActivityLog>;
-
-    // Product Inventory
-  getAllProductInventory(): Promise<ProductInventory[]>;
-  getProductInventory(id: string): Promise<ProductInventory | undefined>;
-  createProductInventory(inventoryData: InsertProductInventory): Promise<ProductInventory>;
-  updateProductInventory(id: string, inventoryData: Partial<InsertProductInventory>): Promise<ProductInventory>;
-  deleteProductInventory(id: string): Promise<void>;
-
-  // User Approvals
-  createUserApproval(approvalData: any): Promise<any>;
-  getUserApprovals(userId: string): Promise<any[]>;
-  getPendingUsers(): Promise<User[]>;
-  approveUser(userId: string, approvalData: any): Promise<User>;
-  getUsersByWarehouse(warehouseId: string): Promise<User[]>;
-  getWarehouseSpareParts(warehouseId: string): Promise<any[]>;
-}
 
 export class DatabaseStorage implements IStorage {
   constructor() {
@@ -567,6 +496,210 @@ export class DatabaseStorage implements IStorage {
       minQuantity: item.inventory.minQuantity,
       category: item.category
     }));
+  }
+
+  // Inventory Management Methods
+  async getInventory(): Promise<Inventory[]> {
+    return await db.select().from(inventory);
+  }
+
+  async getInventoryItem(id: string): Promise<Inventory | undefined> {
+    const [item] = await db.select().from(inventory).where(eq(inventory.id, id));
+    return item || undefined;
+  }
+
+  async createInventoryItem(item: InsertInventory): Promise<Inventory> {
+    const [created] = await db.insert(inventory).values(item).returning();
+    return created;
+  }
+
+  async updateInventoryItem(id: string, item: Partial<Inventory>): Promise<Inventory> {
+    const [updated] = await db
+      .update(inventory)
+      .set({ ...item, updatedAt: new Date() })
+      .where(eq(inventory.id, id))
+      .returning();
+    
+    if (!updated) throw new Error('Inventory item not found');
+    return updated;
+  }
+
+  async deleteInventoryItem(id: string): Promise<void> {
+    await db.delete(inventory).where(eq(inventory.id, id));
+  }
+
+  // Spare Parts CRUD
+  async getAllSpareParts(): Promise<SparePart[]> {
+    return await db.select().from(spareParts).orderBy(desc(spareParts.createdAt));
+  }
+
+  async getSparePart(id: string): Promise<SparePart | undefined> {
+    const [sparePart] = await db.select().from(spareParts).where(eq(spareParts.id, id));
+    return sparePart || undefined;
+  }
+
+  async createSparePart(sparePartData: InsertSparePart): Promise<SparePart> {
+    const [sparePart] = await db.insert(spareParts).values(sparePartData).returning();
+    return sparePart;
+  }
+
+  async updateSparePart(id: string, sparePartData: Partial<SparePart>): Promise<SparePart> {
+    const [updated] = await db
+      .update(spareParts)
+      .set(sparePartData)
+      .where(eq(spareParts.id, id))
+      .returning();
+    
+    if (!updated) throw new Error('Spare part not found');
+    return updated;
+  }
+
+  async deleteSparePart(id: string): Promise<void> {
+    await db.delete(spareParts).where(eq(spareParts.id, id));
+  }
+
+  // Parts Transfers CRUD
+  async getAllPartsTransfers(): Promise<PartsTransfer[]> {
+    return await db.select().from(partsTransfers).orderBy(desc(partsTransfers.createdAt));
+  }
+
+  async getPartsTransfer(id: string): Promise<PartsTransfer | undefined> {
+    const [transfer] = await db.select().from(partsTransfers).where(eq(partsTransfers.id, id));
+    return transfer || undefined;
+  }
+
+  async createPartsTransfer(transferData: InsertPartsTransfer): Promise<PartsTransfer> {
+    // Generate transfer number if not provided
+    const completeTransferData = {
+      ...transferData,
+      transferNumber: transferData.transferNumber || `TF-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`
+    };
+    
+    const [transfer] = await db.insert(partsTransfers).values(completeTransferData).returning();
+    return transfer;
+  }
+
+  async updatePartsTransfer(id: string, transferData: Partial<PartsTransfer>): Promise<PartsTransfer> {
+    const [updated] = await db
+      .update(partsTransfers)
+      .set(transferData)
+      .where(eq(partsTransfers.id, id))
+      .returning();
+    
+    if (!updated) throw new Error('Parts transfer not found');
+    return updated;
+  }
+
+  async deletePartsTransfer(id: string): Promise<void> {
+    await db.delete(partsTransfers).where(eq(partsTransfers.id, id));
+  }
+
+  // Spare Parts Scrap and Shortage implementation
+  async getSparePartsScrap(): Promise<any[]> {
+    return await db.select().from(sparePartsScrap).orderBy(desc(sparePartsScrap.createdAt));
+  }
+
+  async createSparePartsScrap(scrapData: any): Promise<any> {
+    const [scrap] = await db.insert(sparePartsScrap).values(scrapData).returning();
+    return scrap;
+  }
+
+  async getSparePartsShortages(): Promise<any[]> {
+    return await db.select().from(sparePartsShortages).where(eq(sparePartsShortages.status, 'open'));
+  }
+
+  async createSparePartsShortage(shortageData: any): Promise<any> {
+    const [shortage] = await db.insert(sparePartsShortages).values(shortageData).returning();
+    return shortage;
+  }
+
+  async resolveSparePartsShortage(id: string): Promise<any> {
+    const [resolved] = await db
+      .update(sparePartsShortages)
+      .set({ status: 'resolved', resolvedAt: new Date() })
+      .where(eq(sparePartsShortages.id, id))
+      .returning();
+    
+    if (!resolved) throw new Error('Shortage not found');
+    return resolved;
+  }
+
+  async createProductInventoryItem(item: InsertProductInventory): Promise<ProductInventory> {
+    const [created] = await db.insert(productInventory).values(item).returning();
+    return created;
+  }
+
+  // Aliases to match interface method names
+  async getUsers(): Promise<User[]> {
+    return this.getAllUsers();
+  }
+
+  async getServiceCenters(): Promise<ServiceCenter[]> {
+    return this.getAllServiceCenters();
+  }
+
+  async getCustomers(): Promise<Customer[]> {
+    return this.getAllCustomers();
+  }
+
+  async getCategories(): Promise<Category[]> {
+    return this.getAllCategories();
+  }
+
+  async getProducts(): Promise<Product[]> {
+    return this.getAllProducts();
+  }
+
+  async getServiceRequests(): Promise<ServiceRequest[]> {
+    return this.getAllServiceRequests();
+  }
+
+  async getServiceRequestFollowUp(id: string): Promise<ServiceRequestFollowUp | undefined> {
+    // Implementation would go here if needed
+    return undefined;
+  }
+
+  async updateServiceRequestFollowUp(id: string, followUp: Partial<ServiceRequestFollowUp>): Promise<ServiceRequestFollowUp> {
+    // Implementation would go here if needed  
+    throw new Error('Not implemented');
+  }
+
+  async deleteServiceRequestFollowUp(id: string): Promise<void> {
+    // Implementation would go here if needed
+  }
+
+  async getWarehouses(): Promise<Warehouse[]> {
+    return this.getAllWarehouses();
+  }
+
+  async getSpareParts(): Promise<SparePart[]> {
+    return this.getAllSpareParts();
+  }
+
+  async updateProductInventoryItem(id: string, item: Partial<ProductInventory>): Promise<ProductInventory> {
+    return this.updateProductInventory(id, item);
+  }
+
+  async deleteProductInventoryItem(id: string): Promise<void> {
+    return this.deleteProductInventory(id);
+  }
+
+  async getPartsTransfers(): Promise<PartsTransfer[]> {
+    return this.getAllPartsTransfers();
+  }
+
+  async getActivityLogs(): Promise<ActivityLog[]> {
+    // Implementation would go here
+    return [];
+  }
+
+  async getActivityLog(id: string): Promise<ActivityLog | undefined> {
+    // Implementation would go here
+    return undefined;
+  }
+
+  async createActivityLog(log: InsertActivityLog): Promise<ActivityLog> {
+    return this.logActivity(log);
   }
 }
 

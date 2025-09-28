@@ -50,6 +50,59 @@ interface SparePartItem {
   quantity: number;
 }
 
+interface ServiceRequestDetails {
+  id: string;
+  requestNumber: string;
+  customerId: string;
+  deviceName: string;
+  model?: string;
+  issue: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  estimatedCost?: number;
+  actualCost?: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  customer?: {
+    id: string;
+    fullName: string;
+    phone?: string;
+    email?: string;
+  };
+  technician?: {
+    id: string;
+    fullName: string;
+    phone?: string;
+    email?: string;
+  };
+  serviceCenter?: {
+    id: string;
+    name: string;
+    address?: string;
+    phone?: string;
+  };
+  creator?: {
+    id: string;
+    fullName: string;
+  };
+  followUps?: Array<{
+    id: string;
+    notes: string;
+    status: string;
+    createdAt: string;
+    user: {
+      id: string;
+      fullName: string;
+    };
+    spareParts: Array<{
+      id: string;
+      name: string;
+      quantity: number;
+      unitPrice?: number;
+    }>;
+  }>;
+}
+
 // Status Badge Component
 const StatusBadge: React.FC<{ status: string; animate?: boolean }> = ({ status, animate = false }) => {
   const statusConfig = {
@@ -200,6 +253,8 @@ export default function ServiceRequestsPage() {
   const [deletingRequest, setDeletingRequest] = useState<ServiceRequest | null>(null);
   const [viewingRequest, setViewingRequest] = useState<ServiceRequest | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [viewingRequestDetails, setViewingRequestDetails] = useState<ServiceRequestDetails | null>(null);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
   const [followingUpRequest, setFollowingUpRequest] = useState<ServiceRequest | null>(null);
   const [isFollowUpDialogOpen, setIsFollowUpDialogOpen] = useState(false);
   const [followUpText, setFollowUpText] = useState('');
@@ -223,6 +278,8 @@ export default function ServiceRequestsPage() {
     const canCreateRequests = user?.role ? hasPermission(user.role, 'service_requests', 'create') : false;
     const canUpdateRequests = user?.role ? hasPermission(user.role, 'service_requests', 'update') : false;
     const canDeleteRequests = user?.role ? hasPermission(user.role, 'service_requests', 'delete') : false;
+    const canAddFollowUps = user?.role ? hasPermission(user.role, 'serviceRequestFollowUps', 'create') : false;
+    const canViewFollowUps = user?.role ? hasPermission(user.role, 'serviceRequestFollowUps', 'read') : false;
 
   // Data fetching
   const { data: serviceRequests = [], isLoading, error } = useQuery({
@@ -342,6 +399,16 @@ export default function ServiceRequestsPage() {
     }
   });
 
+  // Fetch service request details
+  const fetchServiceRequestDetails = async (id: string): Promise<ServiceRequestDetails> => {
+    const response = await fetch(`/api/service-requests/${id}/details`, {
+      method: 'GET',
+      credentials: 'include'
+    });
+    if (!response.ok) throw new Error('Failed to fetch service request details');
+    return response.json();
+  };
+
   // Event handlers
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -349,6 +416,20 @@ export default function ServiceRequestsPage() {
       updateMutation.mutate({ id: editingRequest.id, data: formData });
     } else {
       createMutation.mutate(formData);
+    }
+  };
+
+  const handleViewDetails = async (request: ServiceRequest) => {
+    try {
+      const details = await fetchServiceRequestDetails(request.id);
+      setViewingRequestDetails(details);
+      setIsDetailsDialogOpen(true);
+    } catch (error) {
+      toast({ 
+        title: 'خطأ في جلب تفاصيل الطلب', 
+        description: 'حدث خطأ أثناء جلب تفاصيل طلب الصيانة',
+        variant: 'destructive' 
+      });
     }
   };
 
@@ -370,13 +451,16 @@ export default function ServiceRequestsPage() {
         ...(newStatus && { newStatus })
       };
 
-      const response = await fetch('/api/service-requests/follow-up', {
+      const response = await fetch(`/api/service-requests/${followingUpRequest.id}/follow-ups`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify(followUpData)
+        credentials: 'include',
+        body: JSON.stringify({
+          followUpText: followUpText,
+          ...(newStatus && { newStatus })
+        })
       });
 
       if (!response.ok) throw new Error('Failed to add follow-up');
@@ -523,6 +607,15 @@ export default function ServiceRequestsPage() {
                 عرض التفاصيل
               </DropdownMenuItem>
               
+              {canViewFollowUps && (
+                <DropdownMenuItem
+                  onClick={() => handleViewDetails(request)}
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  عرض التفاصيل الكاملة
+                </DropdownMenuItem>
+              )}
+              
               {canUpdateRequests && (
                 <>
                   <DropdownMenuItem
@@ -534,7 +627,11 @@ export default function ServiceRequestsPage() {
                     <Edit2 className="mr-2 h-4 w-4" />
                     تعديل
                   </DropdownMenuItem>
-                  
+                </>
+              )}
+              
+              {canAddFollowUps && (
+                <>
                   <DropdownMenuItem
                     onClick={() => {
                       setFollowingUpRequest(request);
@@ -1063,6 +1160,243 @@ export default function ServiceRequestsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Service Request Details Dialog */}
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-right">
+              تفاصيل طلب الصيانة #{viewingRequestDetails?.requestNumber}
+            </DialogTitle>
+          </DialogHeader>
+          
+          {viewingRequestDetails && (
+            <div className="space-y-6 text-right">
+              {/* Basic Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">معلومات أساسية</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="font-semibold">رقم الطلب</Label>
+                    <p>{viewingRequestDetails.requestNumber}</p>
+                  </div>
+                  <div>
+                    <Label className="font-semibold">الجهاز</Label>
+                    <p>{viewingRequestDetails.deviceName}</p>
+                    {viewingRequestDetails.model && (
+                      <p className="text-sm text-muted-foreground">الموديل: {viewingRequestDetails.model}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="font-semibold">المشكلة</Label>
+                    <p>{viewingRequestDetails.issue}</p>
+                  </div>
+                  <div>
+                    <Label className="font-semibold">الحالة</Label>
+                    <StatusBadge status={viewingRequestDetails.status} />
+                  </div>
+                  <div>
+                    <Label className="font-semibold">التكلفة المقدرة</Label>
+                    <p>{viewingRequestDetails.estimatedCost ? `${viewingRequestDetails.estimatedCost} ر.س` : '-'}</p>
+                  </div>
+                  <div>
+                    <Label className="font-semibold">التكلفة الفعلية</Label>
+                    <p>{viewingRequestDetails.actualCost ? `${viewingRequestDetails.actualCost} ر.س` : '-'}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="font-semibold">ملاحظات</Label>
+                    <p>{viewingRequestDetails.notes || '-'}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* People Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Customer Information */}
+                {viewingRequestDetails.customer && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">معلومات العميل</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <div>
+                        <Label className="font-semibold">الاسم</Label>
+                        <p>{viewingRequestDetails.customer.fullName}</p>
+                      </div>
+                      {viewingRequestDetails.customer.phone && (
+                        <div>
+                          <Label className="font-semibold">الهاتف</Label>
+                          <p>{viewingRequestDetails.customer.phone}</p>
+                        </div>
+                      )}
+                      {viewingRequestDetails.customer.email && (
+                        <div>
+                          <Label className="font-semibold">البريد الإلكتروني</Label>
+                          <p>{viewingRequestDetails.customer.email}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Technician Information */}
+                {viewingRequestDetails.technician && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">معلومات الفني</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <div>
+                        <Label className="font-semibold">الاسم</Label>
+                        <p>{viewingRequestDetails.technician.fullName}</p>
+                      </div>
+                      {viewingRequestDetails.technician.phone && (
+                        <div>
+                          <Label className="font-semibold">الهاتف</Label>
+                          <p>{viewingRequestDetails.technician.phone}</p>
+                        </div>
+                      )}
+                      {viewingRequestDetails.technician.email && (
+                        <div>
+                          <Label className="font-semibold">البريد الإلكتروني</Label>
+                          <p>{viewingRequestDetails.technician.email}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+
+              {/* Service Center and Creator */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Service Center */}
+                {viewingRequestDetails.serviceCenter && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">مركز الصيانة</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <div>
+                        <Label className="font-semibold">اسم المركز</Label>
+                        <p>{viewingRequestDetails.serviceCenter.name}</p>
+                      </div>
+                      {viewingRequestDetails.serviceCenter.address && (
+                        <div>
+                          <Label className="font-semibold">العنوان</Label>
+                          <p>{viewingRequestDetails.serviceCenter.address}</p>
+                        </div>
+                      )}
+                      {viewingRequestDetails.serviceCenter.phone && (
+                        <div>
+                          <Label className="font-semibold">الهاتف</Label>
+                          <p>{viewingRequestDetails.serviceCenter.phone}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Creator */}
+                {viewingRequestDetails.creator && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">منشئ الطلب</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <div>
+                        <Label className="font-semibold">الاسم</Label>
+                        <p>{viewingRequestDetails.creator.fullName}</p>
+                      </div>
+                      <div>
+                        <Label className="font-semibold">تاريخ الإنشاء</Label>
+                        <p>{new Date(viewingRequestDetails.createdAt).toLocaleString('ar-SA')}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+
+              {/* Follow-ups Timeline */}
+              {viewingRequestDetails.followUps && viewingRequestDetails.followUps.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">سجل المتابعات</CardTitle>
+                    <CardDescription>
+                      جميع المتابعات التي تمت على هذا الطلب ({viewingRequestDetails.followUps.length} متابعة)
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {viewingRequestDetails.followUps.map((followUp, index) => (
+                        <div key={followUp.id} className="border-r-4 border-r-blue-500 pr-4 pb-4 border-b border-b-gray-100 last:border-b-0">
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge variant="outline" className="text-xs">
+                                  متابعة #{viewingRequestDetails.followUps!.length - index}
+                                </Badge>
+                                <StatusBadge status={followUp.status} />
+                              </div>
+                              <p className="text-sm font-semibold text-muted-foreground">
+                                بواسطة: {followUp.user.fullName}
+                              </p>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(followUp.createdAt).toLocaleString('ar-SA')}
+                            </p>
+                          </div>
+                          
+                          <div className="mb-3">
+                            <Label className="font-semibold text-sm">الملاحظات:</Label>
+                            <p className="text-sm mt-1">{followUp.notes}</p>
+                          </div>
+
+                          {followUp.spareParts && followUp.spareParts.length > 0 && (
+                            <div>
+                              <Label className="font-semibold text-sm">قطع الغيار المستخدمة:</Label>
+                              <div className="mt-2 space-y-1">
+                                {followUp.spareParts.map((part) => (
+                                  <div key={part.id} className="flex justify-between items-center text-sm bg-gray-50 dark:bg-gray-800 p-2 rounded">
+                                    <span>{part.name}</span>
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="secondary">الكمية: {part.quantity}</Badge>
+                                      {part.unitPrice && (
+                                        <Badge variant="outline">السعر: {part.unitPrice} ر.س</Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* No follow-ups message */}
+              {(!viewingRequestDetails.followUps || viewingRequestDetails.followUps.length === 0) && (
+                <Card>
+                  <CardContent className="text-center py-8">
+                    <MessageSquarePlus className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">لا توجد متابعات لهذا الطلب بعد</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+          
+          <div className="flex justify-end mt-6">
+            <Button variant="outline" onClick={() => setIsDetailsDialogOpen(false)}>
+              إغلاق
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
