@@ -11,7 +11,7 @@ interface SidebarProps {
 const menuItems = [
   { id: "dashboard", path: "/dashboard", icon: "bi-speedometer2", label: "لوحة التحكم" },
   { id: "unified", path: "/dashboard/unified", icon: "bi-speedometer", label: "الإدارة الموحدة المطورة" },
-  { id: "management", path: "/dashboard/management", icon: "bi-grid-3x3-gap", label: "الإدارة الموحدة" },
+  { id: "management", path: "/dashboard/management", icon: "bi-grid-3x3-gap", label: "الإدارة الموحدة المحسنة" },
   { id: "user-management", path: "/dashboard/user-management", icon: "bi-people-fill", label: "إدارة المستخدمين" },
   { id: "users", path: "/dashboard/users", icon: "bi-people", label: "المستخدمين" },
   // { id: "user-approvals", path: "/dashboard/user-approvals", icon: "bi-check-circle", label: "الموافقات" },

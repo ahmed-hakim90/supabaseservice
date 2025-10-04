@@ -1,0 +1,228 @@
+# الأنماط المكررة في المشروع - Duplicate Patterns
+
+## 1. أنماط إدارة النماذج (Form Management Patterns)
+تم العثور على هذا النمط في 20+ ملف:
+```typescript
+const [formData, setFormData] = useState<Partial<SomeType>>({});
+const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+const [editingItem, setEditingItem] = useState<SomeType | null>(null);
+const { toast } = useToast();
+const queryClient = useQueryClient();
+```
+
+الملفات المتأثرة:
+- client/src/pages/users.tsx
+- client/src/pages/customers.tsx
+- client/src/pages/centers.tsx
+- client/src/pages/warehouses.tsx
+- client/src/pages/inventory.tsx
+- client/src/pages/categories.tsx
+- client/src/pages/service-requests.tsx
+- client/src/pages/transfers.tsx
+- client/src/pages/transfers-new.tsx
+- client/src/pages/spare-parts-management.tsx
+- client/src/pages/user-management.tsx
+- client/src/pages/warehouse-management.tsx
+- client/src/pages/products-management.tsx
+- client/src/components/auth/signup-page.tsx
+- client/src/components/auth/login-page.tsx
+- وملفات أخرى كثيرة...
+
+## 2. أنماط طلبات API المكررة (API Query Patterns)
+تم العثور على هذا النمط في 30+ ملف:
+```typescript
+const { data: items = [], isLoading } = useQuery({
+  queryKey: ['/api/some-endpoint'],
+  queryFn: () => apiGet('/api/some-endpoint'),
+});
+```
+
+## 3. أنماط Mutations المكررة (CRUD Mutations)
+تم العثور على هذا النمط في كل صفحة إدارة:
+```typescript
+const createItemMutation = useMutation({
+  mutationFn: (data: InsertType) => apiPost('/api/endpoint', data),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/endpoint'] });
+    setIsAddDialogOpen(false);
+    setFormData({});
+    toast({ title: "تم الإنشاء بنجاح" });
+  },
+  onError: (error: any) => {
+    toast({ 
+      title: "خطأ في الإنشاء", 
+      description: error.message,
+      variant: "destructive" 
+    });
+  }
+});
+
+const updateItemMutation = useMutation({
+  mutationFn: ({ id, data }: { id: string; data: UpdateType }) => 
+    apiPut(`/api/endpoint/${id}`, data),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/endpoint'] });
+    setEditingItem(null);
+    setFormData({});
+    toast({ title: "تم التحديث بنجاح" });
+  }
+});
+
+const deleteItemMutation = useMutation({
+  mutationFn: (id: string) => apiDelete(`/api/endpoint/${id}`),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/endpoint'] });
+    toast({ title: "تم الحذف بنجاح" });
+  }
+});
+```
+
+## 4. أنماط البحث والتصفية المكررة (Search & Filter Patterns)
+```typescript
+const [searchTerm, setSearchTerm] = useState("");
+const [statusFilter, setStatusFilter] = useState("all");
+const [categoryFilter, setCategoryFilter] = useState("all");
+
+// في JSX
+<Input
+  placeholder="البحث..."
+  value={searchTerm}
+  onChange={(e) => setSearchTerm(e.target.value)}
+  className="text-right"
+/>
+
+<Select value={statusFilter} onValueChange={setStatusFilter}>
+  <SelectTrigger>
+    <SelectValue placeholder="اختر الحالة" />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="all">الكل</SelectItem>
+    <SelectItem value="active">نشط</SelectItem>
+    <SelectItem value="inactive">غير نشط</SelectItem>
+  </SelectContent>
+</Select>
+```
+
+## 5. أنماط Dialog المكررة (Dialog Patterns)
+```typescript
+// Add Dialog
+<Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+  <DialogTrigger asChild>
+    <Button>
+      <Plus className="mr-2 h-4 w-4" />
+      إضافة
+    </Button>
+  </DialogTrigger>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>إضافة عنصر جديد</DialogTitle>
+    </DialogHeader>
+    {/* Form Content */}
+  </DialogContent>
+</Dialog>
+
+// Edit functionality
+const handleEdit = (item: SomeType) => {
+  setEditingItem(item);
+  setFormData(item);
+  setIsAddDialogOpen(true);
+};
+
+const handleSubmit = (e: React.FormEvent) => {
+  e.preventDefault();
+  if (editingItem) {
+    updateItemMutation.mutate({ id: editingItem.id, data: formData });
+  } else {
+    createItemMutation.mutate(formData as InsertType);
+  }
+};
+```
+
+## 6. أنماط تنسيق البيانات المكررة (Data Formatting Patterns)
+```typescript
+// Date formatting
+const formatDate = (date: string | Date) => {
+  return format(new Date(date), "dd/MM/yyyy", { locale: ar });
+};
+
+// Status badges
+const getStatusBadge = (status: string) => {
+  const statusColors: Record<string, string> = {
+    active: "bg-green-500",
+    inactive: "bg-red-500",
+    pending: "bg-yellow-500"
+  };
+  return <Badge className={statusColors[status]}>{statusLabels[status]}</Badge>;
+};
+```
+
+## 7. أنماط التحقق من الصلاحيات المكررة (Permission Patterns)
+```typescript
+import { canCreate, canUpdate, canDelete } from "../lib/permissions";
+
+// في JSX
+{canCreate(user, 'resource') && (
+  <Button>إضافة</Button>
+)}
+
+{canUpdate(user, 'resource') && (
+  <Button>تعديل</Button>
+)}
+
+{canDelete(user, 'resource') && (
+  <Button>حذف</Button>
+)}
+```
+
+## 8. أنماط اتصال WebSocket المكررة
+```typescript
+import { useWebSocket } from "@/hooks/use-websocket";
+
+const { isConnected, data } = useWebSocket();
+```
+
+## 9. أنماط Loading States المكررة
+```typescript
+if (isLoading) {
+  return <div>جاري التحميل...</div>;
+}
+
+// أو
+<Button disabled={isLoading || isSaving}>
+  {isLoading ? "جاري التحميل..." : "حفظ"}
+</Button>
+```
+
+## 10. أنماط Error Handling المكررة
+```typescript
+const handleError = (error: any) => {
+  toast({
+    title: "حدث خطأ",
+    description: error.message || "حدث خطأ غير متوقع",
+    variant: "destructive"
+  });
+};
+```
+
+## المشاكل الرئيسية:
+1. تكرار كبير في كود إدارة النماذج
+2. تكرار في منطق CRUD operations
+3. تكرار في أنماط البحث والتصفية
+4. تكرار في معالجة الأخطاء
+5. تكرار في أنماط loading states
+6. تكرار في كود الـ dialogs
+7. تكرار في تنسيق البيانات
+8. تكرار في التحقق من الصلاحيات
+
+## الحل المطلوب:
+إنشاء مكونات وهوكس قابلة لإعادة الاستخدام لكل هذه الأنماط:
+- useFormManagement hook
+- useCrudOperations hook
+- useDataTable hook
+- ReusableDialog component
+- ReusableDataTable component
+- usePermissions hook
+- FormField components
+- StatusBadge component
+- LoadingButton component
+- ErrorBoundary component

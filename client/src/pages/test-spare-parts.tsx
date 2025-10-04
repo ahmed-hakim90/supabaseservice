@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,11 +25,24 @@ export default function TestSparePartCreation() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  // بيانات تجريبية للمخازن (يجب استبدالها ببيانات حقيقية من API)
-  const testWarehouses = [
-    { id: 'f8442b7f-9455-4f0a-8ef2-e7cac45c9eb4', name: 'المخزن الرئيسي' },
-    { id: 'test-warehouse-2', name: 'مخزن فرعي' }
-  ];
+  // Real warehouses data from API
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchWarehouses = async () => {
+      try {
+        const response = await fetch('/api/warehouses');
+        if (response.ok) {
+          const data = await response.json();
+          setWarehouses(data);
+        }
+      } catch (error) {
+        console.error('Error fetching warehouses:', error);
+      }
+    };
+
+    fetchWarehouses();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -184,7 +197,7 @@ export default function TestSparePartCreation() {
                     <SelectValue placeholder="اختر المخزن" />
                   </SelectTrigger>
                   <SelectContent>
-                    {testWarehouses.map((warehouse) => (
+                    {warehouses.map((warehouse: any) => (
                       <SelectItem key={warehouse.id} value={warehouse.id}>
                         {warehouse.name}
                       </SelectItem>

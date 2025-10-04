@@ -9,7 +9,7 @@ async function testConnection() {
     // Test basic connection
     const result = await db.execute(sql`SELECT NOW() as current_time`);
     console.log('✅ Database connection successful!');
-    console.log('Current time:', result[0]?.current_time);
+    console.log('Current time:', (result as any)[0]?.current_time); // Type assertion to fix the error
     
     return true;
   } catch (error) {

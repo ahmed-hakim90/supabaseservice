@@ -3749,6 +3749,463 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // System Administration Endpoints
+  app.get("/api/system/database-stats", async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const dbStats = await storage.getDatabaseStats();
+      res.json(dbStats);
+    } catch (error) {
+      console.error("Get database stats error:", error);
+      res.status(500).json({ message: "خطأ في جلب إحصائيات قاعدة البيانات" });
+    }
+  });
+
+  app.get("/api/system/api-stats", async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const apiStats = await storage.getApiStats();
+      res.json(apiStats);
+    } catch (error) {
+      console.error("Get API stats error:", error);
+      res.status(500).json({ message: "خطأ في جلب إحصائيات API" });
+    }
+  });
+
+  app.get("/api/system/user-activity", async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const userActivity = await storage.getUserActivityStats();
+      res.json(userActivity);
+    } catch (error) {
+      console.error("Get user activity error:", error);
+      res.status(500).json({ message: "خطأ في جلب نشاط المستخدمين" });
+    }
+  });
+
+  app.get("/api/system/maintenance-tasks", async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const maintenanceTasks = await storage.getMaintenanceTasks();
+      res.json(maintenanceTasks);
+    } catch (error) {
+      console.error("Get maintenance tasks error:", error);
+      res.status(500).json({ message: "خطأ في جلب مهام الصيانة" });
+    }
+  });
+
+  app.get("/api/system/health", async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const systemHealth = await storage.getSystemHealth();
+      res.json(systemHealth);
+    } catch (error) {
+      console.error("Get system health error:", error);
+      res.status(500).json({ message: "خطأ في جلب حالة النظام" });
+    }
+  });
+
+  // System Settings APIs
+  app.get("/api/system/preferences", async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "غير مسجل الدخول" });
+      }
+
+      const { userId } = req.query;
+      const targetUserId = userId || user.id;
+
+      // Only admin can access other users' preferences
+      if (targetUserId !== user.id && user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const preferences = await storage.getUserPreferences(targetUserId as string);
+      res.json(preferences);
+    } catch (error) {
+      console.error("Get preferences error:", error);
+      res.status(500).json({ message: "خطأ في جلب الإعدادات" });
+    }
+  });
+
+  app.post("/api/system/preferences", async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "غير مسجل الدخول" });
+      }
+
+      const { preferences, userId } = req.body;
+      const targetUserId = userId || user.id;
+
+      // Only admin can modify other users' preferences
+      if (targetUserId !== user.id && user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      await storage.saveUserPreferences(targetUserId, preferences);
+      res.json({ message: "تم حفظ الإعدادات بنجاح" });
+    } catch (error) {
+      console.error("Save preferences error:", error);
+      res.status(500).json({ message: "خطأ في حفظ الإعدادات" });
+    }
+  });
+
+  app.post("/api/system/config", async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const { config, preferences, userId } = req.body;
+      
+      // Save system configuration
+      await storage.saveSystemConfig(config);
+      
+      // Save user preferences if provided
+      if (preferences && userId) {
+        await storage.saveUserPreferences(userId, preferences);
+      }
+
+      res.json({ message: "تم حفظ إعدادات النظام بنجاح" });
+    } catch (error) {
+      console.error("Save system config error:", error);
+      res.status(500).json({ message: "خطأ في حفظ إعدادات النظام" });
+    }
+  });
+
+  app.get("/api/system/config", async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const config = await storage.getSystemConfig();
+      res.json(config);
+    } catch (error) {
+      console.error("Get system config error:", error);
+      res.status(500).json({ message: "خطأ في جلب إعدادات النظام" });
+    }
+  });
+
+  // Notifications routes
+  app.get('/api/notifications', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "غير مسجل الدخول" });
+      }
+
+      const { getNotifications } = await import('./drizzle-storage');
+      const notifications = await getNotifications();
+      res.json(notifications);
+    } catch (error) {
+      console.error('Error getting notifications:', error);
+      res.status(500).json({ message: 'فشل في جلب الإشعارات' });
+    }
+  });
+
+  app.post('/api/notifications/:id/read', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "غير مسجل الدخول" });
+      }
+
+      const { markNotificationAsRead } = await import('./drizzle-storage');
+      const result = await markNotificationAsRead(parseInt(req.params.id));
+      res.json(result);
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+      res.status(500).json({ message: 'فشل في تمييز الإشعار كمقروء' });
+    }
+  });
+
+  app.post('/api/notifications/read-all', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "غير مسجل الدخول" });
+      }
+
+      const { markAllNotificationsAsRead } = await import('./drizzle-storage');
+      const result = await markAllNotificationsAsRead();
+      res.json(result);
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+      res.status(500).json({ message: 'فشل في تمييز جميع الإشعارات كمقروءة' });
+    }
+  });
+
+  app.delete('/api/notifications/:id', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "غير مسجل الدخول" });
+      }
+
+      const { dismissNotification } = await import('./drizzle-storage');
+      const result = await dismissNotification(parseInt(req.params.id));
+      res.json(result);
+    } catch (error) {
+      console.error('Error dismissing notification:', error);
+      res.status(500).json({ message: 'فشل في رفض الإشعار' });
+    }
+  });
+
+  // Alerts routes
+  app.get('/api/alerts', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "غير مسجل الدخول" });
+      }
+
+      const { getAlerts } = await import('./drizzle-storage');
+      const alerts = await getAlerts();
+      res.json(alerts);
+    } catch (error) {
+      console.error('Error getting alerts:', error);
+      res.status(500).json({ message: 'فشل في جلب التنبيهات' });
+    }
+  });
+
+  app.post('/api/alerts/:id/resolve', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || (user.role !== 'admin' && user.role !== 'manager')) {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const { resolveAlert } = await import('./drizzle-storage');
+      const result = await resolveAlert(parseInt(req.params.id));
+      res.json(result);
+    } catch (error) {
+      console.error('Error resolving alert:', error);
+      res.status(500).json({ message: 'فشل في حل التنبيه' });
+    }
+  });
+
+  // User management routes
+  app.put('/api/users/:id/role', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const { updateUserRole } = await import('./drizzle-storage');
+      const result = await updateUserRole(parseInt(req.params.id), req.body.roleId);
+      res.json(result);
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      res.status(500).json({ message: 'فشل في تحديث دور المستخدم' });
+    }
+  });
+
+  app.put('/api/users/:id/status', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || (user.role !== 'admin' && user.role !== 'manager')) {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const { updateUserStatus } = await import('./drizzle-storage');
+      const result = await updateUserStatus(parseInt(req.params.id), req.body.status);
+      res.json(result);
+    } catch (error) {
+      console.error('Error updating user status:', error);
+      res.status(500).json({ message: 'فشل في تحديث حالة المستخدم' });
+    }
+  });
+
+  // Role management routes
+  app.post('/api/roles', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const { createRole } = await import('./drizzle-storage');
+      const result = await createRole(req.body);
+      res.json(result);
+    } catch (error) {
+      console.error('Error creating role:', error);
+      res.status(500).json({ message: 'فشل في إنشاء الدور' });
+    }
+  });
+
+  app.delete('/api/roles/:id', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const { deleteRole } = await import('./drizzle-storage');
+      const result = await deleteRole(parseInt(req.params.id));
+      res.json(result);
+    } catch (error) {
+      console.error('Error deleting role:', error);
+      res.status(500).json({ message: 'فشل في حذف الدور' });
+    }
+  });
+
+  // Backup routes
+  app.post('/api/backups', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const { createBackup } = await import('./drizzle-storage');
+      const result = await createBackup(req.body);
+      res.json(result);
+    } catch (error) {
+      console.error('Error creating backup:', error);
+      res.status(500).json({ message: 'فشل في إنشاء النسخة الاحتياطية' });
+    }
+  });
+
+  app.post('/api/backups/:id/restore', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const { restoreBackup } = await import('./drizzle-storage');
+      const result = await restoreBackup(parseInt(req.params.id));
+      res.json(result);
+    } catch (error) {
+      console.error('Error restoring backup:', error);
+      res.status(500).json({ message: 'فشل في استعادة النسخة الاحتياطية' });
+    }
+  });
+
+  // Audit routes
+  app.post('/api/audit/rules', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const { createAuditRule } = await import('./drizzle-storage');
+      const result = await createAuditRule(req.body);
+      res.json(result);
+    } catch (error) {
+      console.error('Error creating audit rule:', error);
+      res.status(500).json({ message: 'فشل في إنشاء قاعدة التدقيق' });
+    }
+  });
+
+  app.put('/api/audit/rules/:id', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const { updateAuditRule } = await import('./drizzle-storage');
+      const result = await updateAuditRule(parseInt(req.params.id), req.body);
+      res.json(result);
+    } catch (error) {
+      console.error('Error updating audit rule:', error);
+      res.status(500).json({ message: 'فشل في تحديث قاعدة التدقيق' });
+    }
+  });
+
+  app.delete('/api/audit/rules/:id', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const { deleteAuditRule } = await import('./drizzle-storage');
+      const result = await deleteAuditRule(parseInt(req.params.id));
+      res.json(result);
+    } catch (error) {
+      console.error('Error deleting audit rule:', error);
+      res.status(500).json({ message: 'فشل في حذف قاعدة التدقيق' });
+    }
+  });
+
+  app.post('/api/audit/events/:id/acknowledge', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "غير مسجل الدخول" });
+      }
+
+      const { acknowledgeEvent } = await import('./drizzle-storage');
+      const result = await acknowledgeEvent(parseInt(req.params.id));
+      res.json(result);
+    } catch (error) {
+      console.error('Error acknowledging event:', error);
+      res.status(500).json({ message: 'فشل في إقرار الحدث' });
+    }
+  });
+
+  app.post('/api/audit/events/:id/resolve', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || (user.role !== 'admin' && user.role !== 'manager')) {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const { resolveEvent } = await import('./drizzle-storage');
+      const result = await resolveEvent(parseInt(req.params.id));
+      res.json(result);
+    } catch (error) {
+      console.error('Error resolving event:', error);
+      res.status(500).json({ message: 'فشل في حل الحدث' });
+    }
+  });
+
+  // Security routes
+  app.post('/api/security/threats/:id/mitigate', async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك" });
+      }
+
+      const { mitigateThreat } = await import('./drizzle-storage');
+      const result = await mitigateThreat(parseInt(req.params.id));
+      res.json(result);
+    } catch (error) {
+      console.error('Error mitigating threat:', error);
+      res.status(500).json({ message: 'فشل في تخفيف التهديد' });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

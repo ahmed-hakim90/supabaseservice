@@ -102,7 +102,7 @@ export type Sale = typeof sales.$inferSelect;
 export type InsertSaleItem = z.infer<typeof insertSaleItemSchema>;
 export type SaleItem = typeof saleItems.$inferSelect;
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, uuid, integer, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, uuid, integer, boolean, pgEnum, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -508,3 +508,25 @@ export const insertWarehousePermissionSchema = createInsertSchema(warehousePermi
 
 export type InsertWarehousePermission = z.infer<typeof insertWarehousePermissionSchema>;
 export type WarehousePermission = typeof warehousePermissions.$inferSelect;
+
+// System Settings table (إعدادات النظام)
+export const systemSettings = pgTable("system_settings", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  settingKey: text("setting_key").notNull(),
+  settingValue: json("setting_value").notNull(),
+  category: text("category").notNull().default('general'), // general, theme, notifications, security, performance
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSystemSettingSchema = createInsertSchema(systemSettings, {
+  settingValue: z.any(),
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSystemSetting = z.infer<typeof insertSystemSettingSchema>;
+export type SystemSetting = typeof systemSettings.$inferSelect;

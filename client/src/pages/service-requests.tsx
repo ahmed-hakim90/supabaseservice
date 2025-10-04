@@ -147,13 +147,24 @@ const SparePartsSelector: React.FC<{
 }> = ({ selectedSpareParts, onSelectionChange }) => {
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Mock spare parts data - replace with actual API call
-  const availableSpareParts = [
-    { id: '1', name: 'مستشعر الضغط', stock: 15 },
-    { id: '2', name: 'كابل التوصيل', stock: 8 },
-    { id: '3', name: 'شاشة العرض', stock: 3 },
-    { id: '4', name: 'بطارية ليثيوم', stock: 12 }
-  ];
+  // Fetch spare parts from API
+  const [availableSpareParts, setAvailableSpareParts] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchSpareParts = async () => {
+      try {
+        const response = await fetch('/api/spare-parts');
+        if (response.ok) {
+          const spareParts = await response.json();
+          setAvailableSpareParts(spareParts);
+        }
+      } catch (error) {
+        console.error('Error fetching spare parts:', error);
+      }
+    };
+
+    fetchSpareParts();
+  }, []);
 
   const addSparePart = (part: any) => {
     const existingPart = selectedSpareParts.find(p => p.id === part.id);

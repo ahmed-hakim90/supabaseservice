@@ -12,7 +12,7 @@ console.log('Connection string (partial):', connectionString.substring(0, 50) + 
 
 async function testConnection() {
   try {
-    const sql = postgres(connectionString, {
+    const sql = postgres(connectionString!, { // Add ! to assert it's not undefined
       max: 1,
       ssl: 'require',
       idle_timeout: 5,

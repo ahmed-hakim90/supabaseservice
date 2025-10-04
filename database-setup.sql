@@ -306,3 +306,21 @@ CREATE INDEX idx_sales_created_at ON sales(created_at);
 
 CREATE INDEX idx_sale_items_sale_id ON sale_items(sale_id);
 CREATE INDEX idx_sale_items_spare_part_id ON sale_items(spare_part_id);
+
+-- Create system_settings table for user preferences and system configuration
+CREATE TABLE system_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  setting_key TEXT NOT NULL,
+  setting_value JSONB NOT NULL,
+  category TEXT NOT NULL DEFAULT 'general',
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Create indexes for system_settings
+CREATE INDEX idx_system_settings_user_id ON system_settings(user_id);
+CREATE INDEX idx_system_settings_category ON system_settings(category);
+CREATE INDEX idx_system_settings_key ON system_settings(setting_key);
+CREATE UNIQUE INDEX idx_system_settings_user_key ON system_settings(user_id, setting_key);

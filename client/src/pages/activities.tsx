@@ -110,8 +110,29 @@ export default function Activities() {
   };
 
   const exportActivities = () => {
-    // Mock export functionality
-    console.log('Exporting activities...');
+    // Real export functionality
+    const exportData = activities.map((activity: any) => ({
+      id: activity.id,
+      type: activity.type,
+      description: activity.description,
+      user: activity.User?.fullName || 'مجهول',
+      timestamp: activity.createdAt,
+      details: activity.details
+    }));
+
+    const csvContent = "data:text/csv;charset=utf-8," + 
+      "ID,النوع,الوصف,المستخدم,التاريخ,التفاصيل\n" +
+      exportData.map((row: any) => 
+        `${row.id},"${row.type}","${row.description}","${row.user}","${row.timestamp}","${row.details || ''}"`
+      ).join("\n");
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `activities_${new Date().getTime()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (

@@ -1,0 +1,2292 @@
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import { NotificationCenter, SystemAlerts, WorkflowProgress } from "@/components/ui/notifications-center";
+import { SystemConfigurator } from "@/components/ui/system-configurator";
+import { ImportExportManager } from "@/components/ui/import-export-manager";
+import { LogViewer } from "@/components/ui/log-viewer";
+import { PerformanceAnalytics } from "@/components/ui/performance-analytics";
+import { AdvancedPermissionManager } from "@/components/ui/advanced-permission-manager";
+import { BackupManager } from "@/components/ui/backup-manager";
+import { AlertCenter } from "@/components/ui/alert-center";
+import { SecurityDashboard } from "@/components/ui/security-dashboard";
+import { NetworkMonitor } from "@/components/ui/network-monitor";
+import { UpdateManager } from "@/components/ui/update-manager";
+import { useAuth } from "@/lib/auth";
+import { hasPermission, type UserRole } from "@/lib/permissions";
+import { formatDistanceToNow } from 'date-fns';
+import { ar } from 'date-fns/locale';
+
+interface SystemStats {
+  uptime: string;
+  memoryUsage: number;
+  diskUsage: number;
+  cpuUsage: number;
+  activeUsers: number;
+  totalUsers: number;
+  dbConnections: number;
+  apiCalls: number;
+  lastBackup: Date | null;
+  totalProducts?: number;
+  lowStockProducts?: number;
+}
+
+export default function SystemAdministrationPage() {
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // System state
+  const [systemStats, setSystemStats] = useState<SystemStats>({
+    uptime: '0',
+    memoryUsage: 0,
+    diskUsage: 0,
+    cpuUsage: 0,
+    activeUsers: 0,
+    totalUsers: 0,
+    dbConnections: 0,
+    apiCalls: 0,
+    lastBackup: null
+  });
+
+  // New states for real data
+  const [databaseStats, setDatabaseStats] = useState<any>(null);
+  const [apiStats, setApiStats] = useState<any>(null);
+  const [userActivity, setUserActivity] = useState<any>(null);
+  const [maintenanceTasks, setMaintenanceTasks] = useState<any>(null);
+
+  // Configuration state
+  const [systemConfig, setSystemConfig] = useState({
+    system: {
+      appName: 'نظام إدارة المؤسسات',
+      version: '2.1.0',
+      environment: 'production' as 'development' | 'staging' | 'production',
+      timezone: 'Asia/Riyadh',
+      language: 'ar',
+      maintenanceMode: false,
+    },
+    database: {
+      maxConnections: 20,
+      connectionTimeout: 30000,
+      backupSchedule: 'daily',
+      autoBackup: true,
+    },
+    notifications: {
+      emailEnabled: true,
+      smsEnabled: false,
+      pushEnabled: true,
+      defaultLanguage: 'ar',
+      retryAttempts: 3,
+    },
+    security: {
+      sessionTimeout: 3600,
+      maxLoginAttempts: 5,
+      passwordMinLength: 8,
+      twoFactorRequired: false,
+      allowedDomains: ['company.com'],
+    },
+    features: {
+      realtimeUpdates: true,
+      darkMode: false,
+      exportEnabled: true,
+      importEnabled: true,
+      auditLogging: true,
+    }
+  });
+
+  // Sample data for components
+  const [notifications] = useState([
+    {
+      id: '1',
+      type: 'warning' as const,
+      title: 'مساحة القرص منخفضة',
+      message: 'مساحة القرص الصلب أصبحت أقل من 10%',
+      timestamp: new Date(),
+      priority: 'high' as const,
+      action: {
+        label: 'تنظيف الملفات',
+        onClick: () => console.log('Clean files')
+      }
+    },
+    {
+      id: '2',
+      type: 'info' as const,
+      title: 'تحديث متوفر',
+      message: 'إصدار جديد من النظام متوفر للتحديث',
+      timestamp: new Date(Date.now() - 1000 * 60 * 30),
+      priority: 'medium' as const,
+    }
+  ]);
+
+  const [systemAlerts] = useState([
+    {
+      id: '1',
+      level: 'warning' as const,
+      message: 'استخدام الذاكرة مرتفع',
+      details: 'استخدام الذاكرة وصل إلى 85% من الحد الأقصى',
+      timestamp: new Date(),
+      resolved: false,
+    }
+  ]);
+
+  const [workflowSteps] = useState([
+    {
+      id: '1',
+      title: 'إعداد قاعدة البيانات',
+      description: 'تكوين الاتصال وإنشاء الجداول',
+      status: 'completed' as const,
+      estimatedTime: '2 دقائق',
+      completedAt: new Date(Date.now() - 1000 * 60 * 10)
+    },
+    {
+      id: '2',
+      title: 'تشغيل الخدمات',
+      description: 'بدء تشغيل خدمات النظام الأساسية',
+      status: 'in_progress' as const,
+      estimatedTime: '1 دقيقة'
+    },
+    {
+      id: '3',
+      title: 'تهيئة الواجهة',
+      description: 'تحميل الواجهة وإعداد المكونات',
+      status: 'pending' as const,
+      estimatedTime: '30 ثانية'
+    }
+  ]);
+
+  // Check permissions
+  const canManageSystem = user && hasPermission(user.role as UserRole, 'users', 'update');
+
+  if (!canManageSystem) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <i className="bi bi-shield-x text-4xl text-red-500 mb-4"></i>
+          <h2 className="text-xl font-semibold mb-2">غير مصرح لك</h2>
+          <p className="text-muted-foreground">لا تملك صلاحية الوصول لإدارة النظام</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Fetch system stats and data
+  useEffect(() => {
+    const fetchSystemHealth = async () => {
+      try {
+        const response = await fetch('/api/system/health');
+        if (response.ok) {
+          const data = await response.json();
+          setSystemStats(data);
+        }
+      } catch (error) {
+        console.error('Error fetching system health:', error);
+      }
+    };
+
+    const fetchDatabaseStats = async () => {
+      try {
+        const response = await fetch('/api/system/database-stats');
+        if (response.ok) {
+          const data = await response.json();
+          setDatabaseStats(data);
+        }
+      } catch (error) {
+        console.error('Error fetching database stats:', error);
+      }
+    };
+
+    const fetchApiStats = async () => {
+      try {
+        const response = await fetch('/api/system/api-stats');
+        if (response.ok) {
+          const data = await response.json();
+          setApiStats(data);
+        }
+      } catch (error) {
+        console.error('Error fetching API stats:', error);
+      }
+    };
+
+    const fetchUserActivity = async () => {
+      try {
+        const response = await fetch('/api/system/user-activity');
+        if (response.ok) {
+          const data = await response.json();
+          setUserActivity(data);
+        }
+      } catch (error) {
+        console.error('Error fetching user activity:', error);
+      }
+    };
+
+    const fetchMaintenanceTasks = async () => {
+      try {
+        const response = await fetch('/api/system/maintenance-tasks');
+        if (response.ok) {
+          const data = await response.json();
+          setMaintenanceTasks(data);
+        }
+      } catch (error) {
+        console.error('Error fetching maintenance tasks:', error);
+      }
+    };
+
+    // Initial fetch
+    fetchSystemHealth();
+    fetchDatabaseStats();
+    fetchApiStats();
+    fetchUserActivity();
+    fetchMaintenanceTasks();
+
+    // Update every 30 seconds
+    const interval = setInterval(() => {
+      fetchSystemHealth();
+      fetchDatabaseStats();
+      fetchApiStats();
+      fetchUserActivity();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleConfigSave = async () => {
+    setIsLoading(true);
+    try {
+      // Simulate saving configuration
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log('Configuration saved:', systemConfig);
+    } catch (error) {
+      console.error('Error saving configuration:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">إدارة النظام</h1>
+          <p className="text-muted-foreground">لوحة التحكم المتقدمة لإدارة النظام</p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <Badge variant="default" className="bg-green-500">
+            <i className="bi bi-circle-fill text-xs mr-1 animate-pulse"></i>
+            النظام يعمل
+          </Badge>
+          <Button variant="outline" size="sm">
+            <i className="bi bi-arrow-clockwise mr-2"></i>
+            تحديث
+          </Button>
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-6 lg:grid-cols-12 gap-1">
+          <TabsTrigger value="dashboard" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-speedometer2"></i>
+            <span className="hidden lg:inline">لوحة التحكم</span>
+          </TabsTrigger>
+          <TabsTrigger value="analytics" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-graph-up"></i>
+            <span className="hidden lg:inline">التحليلات</span>
+          </TabsTrigger>
+          <TabsTrigger value="alerts" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-exclamation-triangle"></i>
+            <span className="hidden lg:inline">التنبيهات الذكية</span>
+          </TabsTrigger>
+          <TabsTrigger value="notifications" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-bell"></i>
+            <span className="hidden lg:inline">الإشعارات</span>
+            {notifications.length > 0 && (
+              <Badge variant="destructive" className="ml-1 text-xs">
+                {notifications.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="security" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-shield-check"></i>
+            <span className="hidden lg:inline">الأمان</span>
+          </TabsTrigger>
+          <TabsTrigger value="network" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-hdd-network"></i>
+            <span className="hidden lg:inline">الشبكة</span>
+          </TabsTrigger>
+          <TabsTrigger value="permissions" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-shield-lock"></i>
+            <span className="hidden lg:inline">الصلاحيات</span>
+          </TabsTrigger>
+          <TabsTrigger value="config" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-gear"></i>
+            <span className="hidden lg:inline">الإعدادات</span>
+          </TabsTrigger>
+          <TabsTrigger value="updates" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-arrow-up-circle"></i>
+            <span className="hidden lg:inline">التحديثات</span>
+          </TabsTrigger>
+          <TabsTrigger value="backup" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-archive"></i>
+            <span className="hidden lg:inline">النسخ الاحتياطية</span>
+          </TabsTrigger>
+          <TabsTrigger value="data" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-database"></i>
+            <span className="hidden lg:inline">البيانات</span>
+          </TabsTrigger>
+          <TabsTrigger value="logs" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-journal-text"></i>
+            <span className="hidden lg:inline">السجلات</span>
+          </TabsTrigger>
+          <TabsTrigger value="database" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-database-gear"></i>
+            <span className="hidden lg:inline">إدارة البيانات</span>
+          </TabsTrigger>
+          <TabsTrigger value="api" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-diagram-3"></i>
+            <span className="hidden lg:inline">مراقبة API</span>
+          </TabsTrigger>
+          <TabsTrigger value="activity" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-person-check"></i>
+            <span className="hidden lg:inline">نشاط المستخدمين</span>
+          </TabsTrigger>
+          <TabsTrigger value="maintenance" className="flex items-center gap-1 text-xs">
+            <i className="bi bi-tools"></i>
+            <span className="hidden lg:inline">الصيانة</span>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Dashboard Tab */}
+        <TabsContent value="dashboard" className="space-y-6 mt-6">
+          {/* System Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">وقت التشغيل</p>
+                    <p className="text-2xl font-bold">{systemStats.uptime}</p>
+                  </div>
+                  <i className="bi bi-clock text-2xl text-blue-600"></i>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">المستخدمون النشطون</p>
+                    <p className="text-2xl font-bold">{systemStats.activeUsers}/{systemStats.totalUsers}</p>
+                  </div>
+                  <i className="bi bi-people text-2xl text-green-600"></i>
+                </div>
+                <div className="mt-2">
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-green-600 h-2 rounded-full" 
+                      style={{ width: `${(systemStats.activeUsers / systemStats.totalUsers) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">استدعاءات API</p>
+                    <p className="text-2xl font-bold">{systemStats.apiCalls.toLocaleString()}</p>
+                  </div>
+                  <i className="bi bi-graph-up text-2xl text-purple-600"></i>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">اليوم</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">آخر نسخة احتياطية</p>
+                    <p className="text-lg font-bold">
+                      {systemStats.lastBackup 
+                        ? systemStats.lastBackup.toLocaleDateString('ar-SA')
+                        : 'غير متوفرة'
+                      }
+                    </p>
+                  </div>
+                  <i className="bi bi-shield-check text-2xl text-orange-600"></i>
+                </div>
+                {systemStats.lastBackup && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    منذ {Math.round((Date.now() - systemStats.lastBackup.getTime()) / (1000 * 60 * 60))} ساعة
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Resource Usage */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <i className="bi bi-memory"></i>
+                  استخدام الذاكرة
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span>المستخدم</span>
+                    <span>{systemStats.memoryUsage}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                      className={`h-3 rounded-full ${
+                        systemStats.memoryUsage > 80 ? 'bg-red-600' : 
+                        systemStats.memoryUsage > 60 ? 'bg-yellow-600' : 'bg-green-600'
+                      }`}
+                      style={{ width: `${systemStats.memoryUsage}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <i className="bi bi-hdd"></i>
+                  استخدام القرص
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span>المستخدم</span>
+                    <span>{systemStats.diskUsage}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                      className={`h-3 rounded-full ${
+                        systemStats.diskUsage > 80 ? 'bg-red-600' : 
+                        systemStats.diskUsage > 60 ? 'bg-yellow-600' : 'bg-green-600'
+                      }`}
+                      style={{ width: `${systemStats.diskUsage}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <i className="bi bi-cpu"></i>
+                  استخدام المعالج
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span>المستخدم</span>
+                    <span>{systemStats.cpuUsage}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                      className={`h-3 rounded-full ${
+                        systemStats.cpuUsage > 80 ? 'bg-red-600' : 
+                        systemStats.cpuUsage > 60 ? 'bg-yellow-600' : 'bg-green-600'
+                      }`}
+                      style={{ width: `${systemStats.cpuUsage}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Recent Activity & Workflow */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <SystemAlerts
+              alerts={systemAlerts}
+              onResolve={(id) => console.log('Resolve alert:', id)}
+              onViewDetails={(alert) => console.log('View details:', alert)}
+            />
+            
+            <WorkflowProgress
+              title="تهيئة النظام"
+              steps={workflowSteps}
+              currentStep={1}
+              onStepClick={(step) => console.log('Step clicked:', step)}
+            />
+          </div>
+        </TabsContent>
+
+        {/* Analytics Tab */}
+        <TabsContent value="analytics" className="mt-6">
+          <PerformanceAnalytics
+            systemMetrics={{
+              totalUsers: systemStats.totalUsers,
+              activeUsers: systemStats.activeUsers,
+              totalRequests: 1250,
+              completedRequests: 1100,
+              totalTransfers: 485,
+              pendingTransfers: 45,
+              totalProducts: systemStats.totalProducts || 850,
+              lowStockProducts: systemStats.lowStockProducts || 23,
+              totalRevenue: 125000,
+              monthlyRevenue: 28500
+            }}
+            onRefresh={() => window.location.reload()}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Notifications Tab */}
+        <TabsContent value="notifications" className="space-y-6 mt-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <NotificationCenter
+              notifications={notifications}
+              onMarkAsRead={(id) => console.log('Mark as read:', id)}
+              onMarkAllAsRead={() => console.log('Mark all as read')}
+              onDismiss={(id) => console.log('Dismiss:', id)}
+            />
+            
+            <SystemAlerts
+              alerts={systemAlerts}
+              onResolve={(id) => console.log('Resolve alert:', id)}
+              onViewDetails={(alert) => console.log('View details:', alert)}
+            />
+          </div>
+        </TabsContent>
+
+        {/* Permissions Management Tab */}
+        <TabsContent value="permissions" className="mt-6">
+          <AdvancedPermissionManager
+            users={[
+              {
+                id: '1',
+                name: 'أحمد محمد',
+                email: 'ahmed@company.com',
+                role: 'admin',
+                permissions: ['users_read', 'users_create'],
+                isActive: true,
+                lastLogin: new Date(Date.now() - 1000 * 60 * 30),
+                createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30)
+              },
+              {
+                id: '2',
+                name: 'فاطمة علي',
+                email: 'fatima@company.com',
+                role: 'manager',
+                permissions: ['inventory_read'],
+                isActive: true,
+                lastLogin: new Date(Date.now() - 1000 * 60 * 60 * 2),
+                createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 15)
+              }
+            ]}
+            roles={[
+              {
+                id: 'admin',
+                name: 'admin',
+                displayName: 'مدير النظام',
+                description: 'صلاحيات كاملة للنظام',
+                permissions: ['users_read', 'users_create', 'users_update', 'users_delete'],
+                isSystem: true
+              },
+              {
+                id: 'manager',
+                name: 'manager',
+                displayName: 'مدير',
+                description: 'إدارة العمليات اليومية',
+                permissions: ['inventory_read', 'transfers_create'],
+                isSystem: false
+              }
+            ]}
+            permissions={[
+              {
+                id: 'users_read',
+                name: 'users_read',
+                displayName: 'عرض المستخدمين',
+                category: 'إدارة المستخدمين',
+                description: 'إمكانية عرض قائمة المستخدمين'
+              },
+              {
+                id: 'users_create',
+                name: 'users_create',
+                displayName: 'إضافة مستخدمين',
+                category: 'إدارة المستخدمين',
+                description: 'إمكانية إضافة مستخدمين جدد'
+              },
+              {
+                id: 'inventory_read',
+                name: 'inventory_read',
+                displayName: 'عرض المخزون',
+                category: 'إدارة المخزون',
+                description: 'إمكانية عرض بيانات المخزون'
+              }
+            ]}
+            onUpdateUserRole={async (userId, roleId) => console.log('Update user role:', userId, roleId)}
+            onUpdateUserPermissions={async (userId, permissions) => console.log('Update user permissions:', userId, permissions)}
+            onUpdateRolePermissions={async (roleId, permissions) => console.log('Update role permissions:', roleId, permissions)}
+            onCreateRole={async (role) => console.log('Create role:', role)}
+            onDeleteRole={async (roleId) => console.log('Delete role:', roleId)}
+            onToggleUserStatus={async (userId, isActive) => console.log('Toggle user status:', userId, isActive)}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Configuration Tab */}
+        <TabsContent value="config" className="mt-6">
+          <SystemConfigurator
+            config={systemConfig}
+            onConfigChange={setSystemConfig}
+            onSave={handleConfigSave}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Data Management Tab */}
+        <TabsContent value="data" className="mt-6">
+          <ImportExportManager
+            backups={[]}
+            restorePoints={[]}
+            onCreateBackup={async (options) => console.log('Create backup:', options)}
+            onRestore={async (id) => console.log('Restore:', id)}
+            onImport={async (file, options) => console.log('Import:', file, options)}
+            onExport={async (options) => console.log('Export:', options)}
+            availableTables={['users', 'roles', 'permissions', 'warehouses', 'inventory', 'parts_transfers']}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Alert Center Tab */}
+        <TabsContent value="alerts" className="mt-6">
+          <AlertCenter
+            rules={[
+              {
+                id: '1',
+                name: 'تنبيه حمولة النظام العالية',
+                description: 'تنبيه عندما تتجاوز حمولة المعالج 80%',
+                category: 'system',
+                severity: 'high',
+                condition: 'system_load',
+                threshold: 80,
+                operator: 'greater',
+                timeWindow: '5m',
+                enabled: true,
+                actions: [
+                  { type: 'email', target: 'admin@company.com', enabled: true }
+                ],
+                lastTriggered: new Date(Date.now() - 1000 * 60 * 30),
+                triggerCount: 12
+              },
+              {
+                id: '2',
+                name: 'تنبيه استخدام الذاكرة',
+                description: 'تنبيه عندما تتجاوز الذاكرة 85%',
+                category: 'performance',
+                severity: 'medium',
+                condition: 'memory_usage',
+                threshold: 85,
+                operator: 'greater',
+                timeWindow: '10m',
+                enabled: true,
+                actions: [
+                  { type: 'notification', target: 'system', enabled: true }
+                ],
+                triggerCount: 5
+              }
+            ]}
+            events={[
+              {
+                id: '1',
+                ruleId: '1',
+                ruleName: 'تنبيه حمولة النظام العالية',
+                severity: 'high',
+                message: 'حمولة المعالج تجاوزت 85% لأكثر من 5 دقائق',
+                timestamp: new Date(Date.now() - 1000 * 60 * 15),
+                acknowledged: false,
+                details: { currentValue: 87, threshold: 80 }
+              },
+              {
+                id: '2',
+                ruleId: '2',
+                ruleName: 'تنبيه استخدام الذاكرة',
+                severity: 'medium',
+                message: 'استخدام الذاكرة وصل إلى 88%',
+                timestamp: new Date(Date.now() - 1000 * 60 * 45),
+                acknowledged: true,
+                acknowledgedBy: 'أحمد محمد',
+                details: { currentValue: 88, threshold: 85 }
+              }
+            ]}
+            metrics={{
+              systemLoad: systemStats.cpuUsage,
+              memoryUsage: systemStats.memoryUsage,
+              diskUsage: systemStats.diskUsage,
+              errorRate: 2.1,
+              responseTime: 245,
+              activeUsers: systemStats.activeUsers
+            }}
+            onCreateRule={async (rule) => console.log('Create rule:', rule)}
+            onUpdateRule={async (ruleId, updates) => console.log('Update rule:', ruleId, updates)}
+            onDeleteRule={async (ruleId) => console.log('Delete rule:', ruleId)}
+            onAcknowledgeEvent={async (eventId) => console.log('Acknowledge event:', eventId)}
+            onResolveEvent={async (eventId) => console.log('Resolve event:', eventId)}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Security Dashboard Tab */}
+        <TabsContent value="security" className="mt-6">
+          <SecurityDashboard
+            threats={[
+              {
+                id: '1',
+                type: 'brute_force',
+                severity: 'high',
+                source: '192.168.1.100',
+                target: 'login-server',
+                timestamp: new Date(Date.now() - 1000 * 60 * 15),
+                status: 'active',
+                description: 'محاولة اختراق بالقوة الغاشمة على خادم تسجيل الدخول',
+                details: { attempts: 50, duration: '15 minutes' }
+              },
+              {
+                id: '2',
+                type: 'suspicious_activity',
+                severity: 'medium',
+                source: '10.0.0.25',
+                target: 'database-server',
+                timestamp: new Date(Date.now() - 1000 * 60 * 45),
+                status: 'investigating',
+                description: 'نشاط مشبوه في قاعدة البيانات خارج ساعات العمل',
+                details: { queries: 147, tables: ['users', 'financial_data'] }
+              }
+            ]}
+            policies={[
+              {
+                id: '1',
+                name: 'سياسة كلمات المرور القوية',
+                category: 'authentication',
+                description: 'فرض استخدام كلمات مرور قوية مع تجديد دوري',
+                enabled: true,
+                rules: [
+                  { id: '1', condition: 'length >= 8', action: 'allow', priority: 1, enabled: true },
+                  { id: '2', condition: 'contains_special_chars', action: 'allow', priority: 2, enabled: true }
+                ],
+                lastModified: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3),
+                modifiedBy: 'أحمد محمد'
+              }
+            ]}
+            auditLogs={[
+              {
+                id: '1',
+                type: 'login',
+                userId: '1',
+                userName: 'أحمد محمد',
+                action: 'تسجيل دخول ناجح',
+                resource: 'لوحة الإدارة',
+                ipAddress: '192.168.1.50',
+                userAgent: 'Chrome 120.0',
+                timestamp: new Date(Date.now() - 1000 * 60 * 30),
+                success: true,
+                riskLevel: 'low',
+                details: { location: 'الرياض، السعودية' }
+              }
+            ]}
+            metrics={{
+              threatsBlocked: 127,
+              loginAttempts: 1543,
+              failedLogins: 23,
+              suspiciousActivities: 8,
+              securityScore: 87,
+              vulnerabilities: 2,
+              patchLevel: 92,
+              lastSecurityScan: new Date(Date.now() - 1000 * 60 * 60 * 12)
+            }}
+            onMitigateThreat={async (threatId) => console.log('Mitigate threat:', threatId)}
+            onUpdatePolicy={async (policyId, updates) => console.log('Update policy:', policyId, updates)}
+            onRunSecurityScan={async () => console.log('Run security scan')}
+            onExportAuditLog={async (filters) => console.log('Export audit log:', filters)}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Network Monitor Tab */}
+        <TabsContent value="network" className="mt-6">
+          <NetworkMonitor
+            connections={[
+              {
+                id: '1',
+                sourceIP: '192.168.1.100',
+                destinationIP: '10.0.0.1',
+                port: 443,
+                protocol: 'TCP',
+                status: 'active',
+                bandwidth: 15.7,
+                latency: 25,
+                packets: { sent: 15420, received: 15398, dropped: 2 },
+                timestamp: new Date(),
+                duration: 1847
+              },
+              {
+                id: '2',
+                sourceIP: '192.168.1.50',
+                destinationIP: '8.8.8.8',
+                port: 53,
+                protocol: 'UDP',
+                status: 'active',
+                bandwidth: 2.1,
+                latency: 8,
+                packets: { sent: 847, received: 845, dropped: 0 },
+                timestamp: new Date(Date.now() - 1000 * 60 * 5),
+                duration: 320
+              }
+            ]}
+            devices={[
+              {
+                id: '1',
+                name: 'خادم الويب الرئيسي',
+                ipAddress: '192.168.1.10',
+                macAddress: '00:1B:44:11:3A:B7',
+                type: 'server',
+                status: 'online',
+                lastSeen: new Date(),
+                operatingSystem: 'Ubuntu 22.04',
+                openPorts: [22, 80, 443],
+                vulnerabilities: 0
+              },
+              {
+                id: '2',
+                name: 'محطة عمل المدير',
+                ipAddress: '192.168.1.100',
+                macAddress: '00:1E:8C:12:34:56',
+                type: 'workstation',
+                status: 'online',
+                lastSeen: new Date(Date.now() - 1000 * 60 * 2),
+                operatingSystem: 'Windows 11',
+                openPorts: [135, 445],
+                vulnerabilities: 1
+              }
+            ]}
+            trafficHistory={[
+              {
+                timestamp: new Date(Date.now() - 1000 * 60 * 60),
+                inbound: 2.5,
+                outbound: 1.8,
+                totalConnections: 147,
+                protocols: { http: 45, https: 78, ftp: 3, ssh: 12, dns: 9, other: 0 }
+              }
+            ]}
+            alerts={[
+              {
+                id: '1',
+                type: 'high_traffic',
+                severity: 'medium',
+                message: 'استخدام عالي للنطاق الترددي من 192.168.1.100',
+                source: '192.168.1.100',
+                timestamp: new Date(Date.now() - 1000 * 60 * 10),
+                acknowledged: false,
+                details: { bandwidth: '85 Mbps', threshold: '50 Mbps' }
+              }
+            ]}
+            currentBandwidth={{
+              download: 45.2,
+              upload: 12.8,
+              total: 58.0,
+              limit: 100.0
+            }}
+            onBlockConnection={async (connectionId) => console.log('Block connection:', connectionId)}
+            onScanNetwork={async () => console.log('Scan network')}
+            onAcknowledgeAlert={async (alertId) => console.log('Acknowledge alert:', alertId)}
+            onExportReport={async (type) => console.log('Export report:', type)}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Update Manager Tab */}
+        <TabsContent value="updates" className="mt-6">
+          <UpdateManager
+            updates={[
+              {
+                id: '1',
+                name: 'Windows Security Update',
+                version: '2024-03-12',
+                currentVersion: '2024-02-14',
+                category: 'security',
+                priority: 'critical',
+                size: 45.7,
+                description: 'تحديث أمني مهم يصلح ثغرات أمنية حرجة في النظام',
+                releaseDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2),
+                status: 'available',
+                requiresRestart: true,
+                dependencies: ['KB5034439'],
+                changelog: [
+                  'إصلاح CVE-2024-26169 في kernel',
+                  'تحسين أداء التشفير',
+                  'إصلاح مشاكل الذاكرة'
+                ]
+              },
+              {
+                id: '2',
+                name: 'Node.js Runtime Update',
+                version: '20.11.1',
+                currentVersion: '20.10.0',
+                category: 'performance',
+                priority: 'medium',
+                size: 28.3,
+                description: 'تحديث بيئة Node.js مع تحسينات الأداء وإصلاحات الأخطاء',
+                releaseDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5),
+                status: 'downloading',
+                progress: 67,
+                requiresRestart: true,
+                changelog: [
+                  'تحسين أداء V8 Engine',
+                  'إصلاح تسريبات الذاكرة',
+                  'دعم أفضل للـ ES modules'
+                ]
+              }
+            ]}
+            channels={[
+              {
+                id: '1',
+                name: 'التحديثات الأمنية',
+                description: 'تحديثات الأمان الحرجة والمهمة',
+                enabled: true,
+                frequency: 'daily',
+                lastCheck: new Date(Date.now() - 1000 * 60 * 60 * 4),
+                nextCheck: new Date(Date.now() + 1000 * 60 * 60 * 20)
+              },
+              {
+                id: '2',
+                name: 'تحديثات الميزات',
+                description: 'التحديثات التي تضيف ميزات جديدة',
+                enabled: false,
+                frequency: 'weekly',
+                lastCheck: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7),
+                nextCheck: null
+              }
+            ]}
+            history={[
+              {
+                id: '1',
+                updateId: '1',
+                updateName: 'System Framework Update',
+                version: '2024-02-14',
+                installedDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 14),
+                installedBy: 'أحمد محمد',
+                status: 'success',
+                duration: 15,
+                notes: 'تم التثبيت بنجاح مع إعادة تشغيل واحدة'
+              }
+            ]}
+            settings={{
+              autoUpdate: false,
+              downloadAutomatic: true,
+              installScheduled: false,
+              maintenanceWindow: {
+                start: '02:00',
+                end: '04:00',
+                days: ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday']
+              },
+              backupBeforeUpdate: true,
+              rollbackEnabled: true,
+              notifications: {
+                available: true,
+                installed: true,
+                failed: true
+              }
+            }}
+            onInstallUpdate={async (updateId) => console.log('Install update:', updateId)}
+            onRollbackUpdate={async (historyId) => console.log('Rollback update:', historyId)}
+            onCheckUpdates={async () => console.log('Check updates')}
+            onUpdateSettings={async (settings) => console.log('Update settings:', settings)}
+            onUpdateChannel={async (channelId, updates) => console.log('Update channel:', channelId, updates)}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Backup Manager Tab */}
+        <TabsContent value="backup" className="mt-6">
+          <BackupManager
+            jobs={[
+              {
+                id: '1',
+                name: 'النسخة اليومية الكاملة',
+                type: 'full',
+                schedule: 'daily',
+                lastRun: new Date(Date.now() - 1000 * 60 * 60 * 12),
+                nextRun: new Date(Date.now() + 1000 * 60 * 60 * 12),
+                status: 'active',
+                retentionDays: 30,
+                size: 2048000000, // 2GB
+                tables: ['users', 'warehouses', 'inventory', 'transfers']
+              },
+              {
+                id: '2',
+                name: 'النسخة الأسبوعية التزايدية',
+                type: 'incremental',
+                schedule: 'weekly',
+                lastRun: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3),
+                nextRun: new Date(Date.now() + 1000 * 60 * 60 * 24 * 4),
+                status: 'active',
+                retentionDays: 90,
+                size: 512000000, // 512MB
+                tables: ['inventory_logs', 'user_activities']
+              }
+            ]}
+            history={[
+              {
+                id: '1',
+                jobId: '1',
+                startTime: new Date(Date.now() - 1000 * 60 * 60 * 12),
+                endTime: new Date(Date.now() - 1000 * 60 * 60 * 12 + 1000 * 60 * 15),
+                status: 'completed',
+                size: 2048000000,
+                duration: 900000, // 15 minutes
+                progress: 100
+              },
+              {
+                id: '2',
+                jobId: '1',
+                startTime: new Date(),
+                endTime: null,
+                status: 'running',
+                size: 1024000000,
+                duration: 0,
+                progress: 65
+              }
+            ]}
+            availableTables={['users', 'roles', 'warehouses', 'inventory', 'transfers', 'logs']}
+            onCreateJob={async (job) => console.log('Create backup job:', job)}
+            onUpdateJob={async (jobId, updates) => console.log('Update backup job:', jobId, updates)}
+            onDeleteJob={async (jobId) => console.log('Delete backup job:', jobId)}
+            onRunJob={async (jobId) => console.log('Run backup job:', jobId)}
+            onRestoreBackup={async (historyId) => console.log('Restore backup:', historyId)}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Advanced Database Management Tab */}
+        <TabsContent value="database" className="mt-6">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <i className="bi bi-database text-blue-600"></i>
+                  إدارة قاعدة البيانات المتقدمة
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <Card className="bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-blue-600">الجداول النشطة</p>
+                          <p className="text-2xl font-bold text-blue-700">24</p>
+                        </div>
+                        <i className="bi bi-table text-2xl text-blue-500"></i>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-r from-green-50 to-green-100 border-green-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-green-600">الفهارس</p>
+                          <p className="text-2xl font-bold text-green-700">127</p>
+                        </div>
+                        <i className="bi bi-search text-2xl text-green-500"></i>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-orange-600">حجم البيانات</p>
+                          <p className="text-2xl font-bold text-orange-700">2.4 GB</p>
+                        </div>
+                        <i className="bi bi-hdd text-2xl text-orange-500"></i>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-purple-600">الاتصالات النشطة</p>
+                          <p className="text-2xl font-bold text-purple-700">{systemStats.dbConnections}</p>
+                        </div>
+                        <i className="bi bi-plug text-2xl text-purple-500"></i>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">إحصائيات الجداول</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {[
+                          { name: 'users', count: '1,247', size: '42.3 MB', status: 'healthy' },
+                          { name: 'service_requests', count: '3,891', size: '156.7 MB', status: 'healthy' },
+                          { name: 'inventory', count: '12,567', size: '298.1 MB', status: 'warning' },
+                          { name: 'parts_transfers', count: '8,234', size: '189.4 MB', status: 'healthy' },
+                          { name: 'activities', count: '45,678', size: '512.8 MB', status: 'healthy' },
+                        ].map((table, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-3 h-3 rounded-full ${
+                                table.status === 'healthy' ? 'bg-green-500' :
+                                table.status === 'warning' ? 'bg-orange-500' : 'bg-red-500'
+                              }`}></div>
+                              <div>
+                                <p className="font-medium">{table.name}</p>
+                                <p className="text-sm text-muted-foreground">{table.count} سجل</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold">{table.size}</p>
+                              <Badge className={`text-xs ${
+                                table.status === 'healthy' ? 'bg-green-100 text-green-700' :
+                                table.status === 'warning' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'
+                              }`}>
+                                {table.status === 'healthy' ? 'سليم' :
+                                 table.status === 'warning' ? 'تحذير' : 'خطأ'}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">عمليات الصيانة</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <Button 
+                          className="w-full justify-start bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                          variant="outline"
+                          onClick={() => console.log('Optimize tables')}
+                        >
+                          <i className="bi bi-speedometer2 mr-2"></i>
+                          تحسين الجداول
+                        </Button>
+                        
+                        <Button 
+                          className="w-full justify-start bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                          variant="outline"
+                          onClick={() => console.log('Rebuild indexes')}
+                        >
+                          <i className="bi bi-arrow-clockwise mr-2"></i>
+                          إعادة بناء الفهارس
+                        </Button>
+                        
+                        <Button 
+                          className="w-full justify-start bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
+                          variant="outline"
+                          onClick={() => console.log('Analyze statistics')}
+                        >
+                          <i className="bi bi-graph-up mr-2"></i>
+                          تحليل الإحصائيات
+                        </Button>
+                        
+                        <Button 
+                          className="w-full justify-start bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
+                          variant="outline"
+                          onClick={() => console.log('Vacuum database')}
+                        >
+                          <i className="bi bi-trash mr-2"></i>
+                          تنظيف قاعدة البيانات
+                        </Button>
+
+                        <Separator />
+                        
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <i className="bi bi-exclamation-triangle text-yellow-600"></i>
+                            <p className="font-medium text-yellow-800">صيانة مجدولة</p>
+                          </div>
+                          <p className="text-sm text-yellow-700">
+                            آخر صيانة: منذ 3 أيام<br/>
+                            الصيانة التالية: خلال 4 أيام
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* API Monitoring Tab */}
+        <TabsContent value="api" className="mt-6">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <i className="bi bi-cloud text-green-600"></i>
+                  مراقبة واجهات البرمجة (API)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <Card className="bg-gradient-to-r from-green-50 to-green-100 border-green-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-green-600">إجمالي الطلبات</p>
+                          <p className="text-2xl font-bold text-green-700">{systemStats.apiCalls.toLocaleString()}</p>
+                        </div>
+                        <i className="bi bi-bar-chart text-2xl text-green-500"></i>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-blue-600">طلبات ناجحة</p>
+                          <p className="text-2xl font-bold text-blue-700">98.7%</p>
+                        </div>
+                        <i className="bi bi-check-circle text-2xl text-blue-500"></i>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-orange-600">متوسط الاستجابة</p>
+                          <p className="text-2xl font-bold text-orange-700">245ms</p>
+                        </div>
+                        <i className="bi bi-stopwatch text-2xl text-orange-500"></i>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-r from-red-50 to-red-100 border-red-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-red-600">أخطاء</p>
+                          <p className="text-2xl font-bold text-red-700">1.3%</p>
+                        </div>
+                        <i className="bi bi-exclamation-triangle text-2xl text-red-500"></i>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">أداء النقاط الطرفية</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {[
+                          { endpoint: '/api/auth/login', requests: '1,234', avgTime: '156ms', status: 'excellent' },
+                          { endpoint: '/api/users', requests: '5,678', avgTime: '89ms', status: 'good' },
+                          { endpoint: '/api/service-requests', requests: '3,456', avgTime: '234ms', status: 'good' },
+                          { endpoint: '/api/inventory', requests: '2,890', avgTime: '445ms', status: 'warning' },
+                          { endpoint: '/api/parts-transfers', requests: '1,567', avgTime: '123ms', status: 'excellent' },
+                        ].map((api, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-3 h-3 rounded-full ${
+                                api.status === 'excellent' ? 'bg-green-500' :
+                                api.status === 'good' ? 'bg-blue-500' :
+                                api.status === 'warning' ? 'bg-orange-500' : 'bg-red-500'
+                              }`}></div>
+                              <div>
+                                <p className="font-medium font-mono text-sm">{api.endpoint}</p>
+                                <p className="text-xs text-muted-foreground">{api.requests} طلب</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold">{api.avgTime}</p>
+                              <Badge className={`text-xs ${
+                                api.status === 'excellent' ? 'bg-green-100 text-green-700' :
+                                api.status === 'good' ? 'bg-blue-100 text-blue-700' :
+                                api.status === 'warning' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'
+                              }`}>
+                                {api.status === 'excellent' ? 'ممتاز' :
+                                 api.status === 'good' ? 'جيد' :
+                                 api.status === 'warning' ? 'بطيء' : 'خطأ'}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">الأخطاء الشائعة</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {[
+                          { error: '401 Unauthorized', count: 23, endpoint: '/api/auth/me', lastSeen: 'منذ 5 دقائق' },
+                          { error: '404 Not Found', count: 12, endpoint: '/api/users/:id', lastSeen: 'منذ 15 دقيقة' },
+                          { error: '500 Internal Error', count: 3, endpoint: '/api/inventory', lastSeen: 'منذ ساعة' },
+                          { error: '429 Rate Limit', count: 8, endpoint: '/api/reports', lastSeen: 'منذ 30 دقيقة' },
+                        ].map((error, index) => (
+                          <div key={index} className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="font-medium text-red-800">{error.error}</p>
+                              <Badge className="bg-red-100 text-red-700">{error.count}</Badge>
+                            </div>
+                            <p className="text-sm text-red-600 font-mono mb-1">{error.endpoint}</p>
+                            <p className="text-xs text-red-500">{error.lastSeen}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* User Activity Tab */}
+        <TabsContent value="activity" className="mt-6">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <i className="bi bi-people text-purple-600"></i>
+                  مراقبة نشاط المستخدمين
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <Card className="bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-purple-600">المستخدمون النشطون</p>
+                          <p className="text-2xl font-bold text-purple-700">{systemStats.activeUsers}</p>
+                        </div>
+                        <i className="bi bi-person-check text-2xl text-purple-500"></i>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-r from-indigo-50 to-indigo-100 border-indigo-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-indigo-600">جلسات اليوم</p>
+                          <p className="text-2xl font-bold text-indigo-700">147</p>
+                        </div>
+                        <i className="bi bi-clock-history text-2xl text-indigo-500"></i>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-r from-teal-50 to-teal-100 border-teal-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-teal-600">متوسط الجلسة</p>
+                          <p className="text-2xl font-bold text-teal-700">24 دقيقة</p>
+                        </div>
+                        <i className="bi bi-hourglass-split text-2xl text-teal-500"></i>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="bg-gradient-to-r from-pink-50 to-pink-100 border-pink-200">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-pink-600">محاولات فاشلة</p>
+                          <p className="text-2xl font-bold text-pink-700">3</p>
+                        </div>
+                        <i className="bi bi-shield-x text-2xl text-pink-500"></i>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">المستخدمون النشطون حالياً</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {[
+                          { name: 'أحمد محمد', role: 'مدير عام', ip: '192.168.1.100', loginTime: 'منذ 2 ساعة', location: 'الرياض' },
+                          { name: 'فاطمة علي', role: 'مديرة مخزن', ip: '192.168.1.101', loginTime: 'منذ 45 دقيقة', location: 'جدة' },
+                          { name: 'محمد حسن', role: 'فني', ip: '192.168.1.102', loginTime: 'منذ 15 دقيقة', location: 'الدمام' },
+                          { name: 'سارة أحمد', role: 'استقبال', ip: '192.168.1.103', loginTime: 'منذ 5 دقائق', location: 'مكة' },
+                        ].map((user, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold">
+                                {user.name.charAt(0)}
+                              </div>
+                              <div>
+                                <p className="font-medium">{user.name}</p>
+                                <p className="text-sm text-muted-foreground">{user.role} • {user.location}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-medium">{user.loginTime}</p>
+                              <p className="text-xs text-muted-foreground font-mono">{user.ip}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">إحصائيات حسب الدور</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {[
+                          { role: 'مدير عام', count: 3, percentage: 15, color: 'bg-red-500' },
+                          { role: 'مدير مخزن', count: 8, percentage: 40, color: 'bg-blue-500' },
+                          { role: 'فني', count: 12, percentage: 60, color: 'bg-green-500' },
+                          { role: 'استقبال', count: 5, percentage: 25, color: 'bg-orange-500' },
+                          { role: 'عميل', count: 2, percentage: 10, color: 'bg-purple-500' },
+                        ].map((role, index) => (
+                          <div key={index} className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">{role.role}</span>
+                              <span className="text-sm text-muted-foreground">{role.count} مستخدم</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className={`h-2 rounded-full ${role.color}`}
+                                style={{ width: `${role.percentage}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* System Maintenance Tab */}
+        <TabsContent value="maintenance" className="mt-6">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <i className="bi bi-tools text-orange-600"></i>
+                  صيانة النظام
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">المهام المجدولة</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {[
+                          { task: 'النسخ الاحتياطي التلقائي', schedule: 'يومياً 2:00 ص', lastRun: 'منذ 6 ساعات', status: 'success' },
+                          { task: 'تنظيف ملفات السجل', schedule: 'أسبوعياً', lastRun: 'منذ 3 أيام', status: 'success' },
+                          { task: 'تحديث الإحصائيات', schedule: 'كل ساعة', lastRun: 'منذ 45 دقيقة', status: 'success' },
+                          { task: 'فحص الأمان', schedule: 'يومياً 6:00 ص', lastRun: 'منذ 10 ساعات', status: 'warning' },
+                          { task: 'تحسين قاعدة البيانات', schedule: 'شهرياً', lastRun: 'منذ 2 أسبوع', status: 'pending' },
+                        ].map((task, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-3 h-3 rounded-full ${
+                                task.status === 'success' ? 'bg-green-500' :
+                                task.status === 'warning' ? 'bg-orange-500' : 
+                                task.status === 'pending' ? 'bg-blue-500' : 'bg-red-500'
+                              }`}></div>
+                              <div>
+                                <p className="font-medium">{task.task}</p>
+                                <p className="text-sm text-muted-foreground">{task.schedule}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-medium">{task.lastRun}</p>
+                              <Badge className={`text-xs ${
+                                task.status === 'success' ? 'bg-green-100 text-green-700' :
+                                task.status === 'warning' ? 'bg-orange-100 text-orange-700' : 
+                                task.status === 'pending' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
+                              }`}>
+                                {task.status === 'success' ? 'مكتمل' :
+                                 task.status === 'warning' ? 'تحذير' :
+                                 task.status === 'pending' ? 'معلق' : 'فشل'}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">أدوات الصيانة</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          <Button 
+                            className="h-auto p-4 flex-col gap-2 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                            variant="outline"
+                            onClick={() => console.log('Clear cache')}
+                          >
+                            <i className="bi bi-arrow-clockwise text-xl"></i>
+                            <span className="text-sm">مسح التخزين المؤقت</span>
+                          </Button>
+                          
+                          <Button 
+                            className="h-auto p-4 flex-col gap-2 bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                            variant="outline"
+                            onClick={() => console.log('Restart services')}
+                          >
+                            <i className="bi bi-power text-xl"></i>
+                            <span className="text-sm">إعادة تشغيل الخدمات</span>
+                          </Button>
+                          
+                          <Button 
+                            className="h-auto p-4 flex-col gap-2 bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
+                            variant="outline"
+                            onClick={() => console.log('Check disk space')}
+                          >
+                            <i className="bi bi-hdd text-xl"></i>
+                            <span className="text-sm">فحص مساحة القرص</span>
+                          </Button>
+                          
+                          <Button 
+                            className="h-auto p-4 flex-col gap-2 bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
+                            variant="outline"
+                            onClick={() => console.log('Run diagnostics')}
+                          >
+                            <i className="bi bi-search text-xl"></i>
+                            <span className="text-sm">تشخيص الأخطاء</span>
+                          </Button>
+                        </div>
+
+                        <Separator />
+                        
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <i className="bi bi-exclamation-triangle text-red-600"></i>
+                            <p className="font-medium text-red-800">منطقة خطرة</p>
+                          </div>
+                          
+                          <Button 
+                            className="w-full justify-start bg-red-100 text-red-700 border-red-300 hover:bg-red-200"
+                            variant="outline"
+                            onClick={() => console.log('Emergency maintenance')}
+                          >
+                            <i className="bi bi-exclamation-circle mr-2"></i>
+                            وضع الصيانة الطارئة
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Logs Tab */}
+        <TabsContent value="logs" className="mt-6">
+          <LogViewer
+            auditLogs={[
+              {
+                id: '1',
+                userId: '1',
+                userName: 'أحمد محمد',
+                userRole: 'admin',
+                action: 'تحديث المستخدم',
+                resource: 'المستخدمون',
+                resourceId: '2',
+                details: { field: 'role', oldValue: 'user', newValue: 'manager' },
+                ipAddress: '192.168.1.100',
+                userAgent: 'Mozilla/5.0...',
+                timestamp: new Date(Date.now() - 1000 * 60 * 30),
+                status: 'success',
+                duration: 245
+              }
+            ]}
+            systemLogs={[
+              {
+                id: '1',
+                level: 'info',
+                message: 'تم بدء تشغيل الخادم بنجاح',
+                source: 'server.js',
+                details: { port: 3001, environment: 'development' },
+                timestamp: new Date(Date.now() - 1000 * 60 * 60),
+                resolved: true
+              },
+              {
+                id: '2',
+                level: 'warning',
+                message: 'استخدام مرتفع للذاكرة',
+                source: 'monitor.js',
+                details: { usage: '85%', threshold: '80%' },
+                timestamp: new Date(Date.now() - 1000 * 60 * 15),
+                resolved: false
+              }
+            ]}
+            onExportLogs={async (options) => console.log('Export logs:', options)}
+            onClearLogs={async (type) => console.log('Clear logs:', type)}
+            isLoading={isLoading}
+          />
+        </TabsContent>
+
+        {/* Database Management Tab */}
+        <TabsContent value="database" className="space-y-6 mt-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Database Tables Overview */}
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <i className="bi bi-table"></i>
+                  جداول قاعدة البيانات
+                </CardTitle>
+                <CardDescription>
+                  معلومات تفصيلية عن جداول قاعدة البيانات والفهارس
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-200 dark:border-gray-700">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-gray-800">
+                        <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right">اسم الجدول</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">عدد السجلات</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">حجم البيانات</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">آخر تحديث</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">الحالة</th>
+                        <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">الإجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {databaseStats?.tables?.map((table: any, index: number) => (
+                        <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                          <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 font-medium">
+                            <div className="flex items-center gap-2">
+                              <i className="bi bi-table text-blue-600"></i>
+                              {table.name}
+                            </div>
+                          </td>
+                          <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">{table.records?.toLocaleString()}</td>
+                          <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">{table.size}</td>
+                          <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">
+                            {table.lastUpdate ? formatDistanceToNow(new Date(table.lastUpdate), { addSuffix: true, locale: ar }) : 'غير متوفر'}
+                          </td>
+                          <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">
+                            <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+                              {table.status === 'active' ? 'نشط' : table.status}
+                            </Badge>
+                          </td>
+                          <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <i className="bi bi-eye h-4 w-4"></i>
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <i className="bi bi-arrow-clockwise h-4 w-4"></i>
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600">
+                                <i className="bi bi-trash h-4 w-4"></i>
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Database Operations */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <i className="bi bi-gear-wide-connected"></i>
+                  عمليات قاعدة البيانات
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Button variant="outline" className="w-full justify-start">
+                  <i className="bi bi-arrow-clockwise w-4 h-4 ml-2"></i>
+                  تحسين قاعدة البيانات
+                </Button>
+                <Button variant="outline" className="w-full justify-start">
+                  <i className="bi bi-database-check w-4 h-4 ml-2"></i>
+                  فحص سلامة البيانات
+                </Button>
+                <Button variant="outline" className="w-full justify-start">
+                  <i className="bi bi-archive w-4 h-4 ml-2"></i>
+                  نسخ احتياطي للبيانات
+                </Button>
+                <Button variant="outline" className="w-full justify-start">
+                  <i className="bi bi-arrow-up-circle w-4 h-4 ml-2"></i>
+                  ترقية المخطط
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Database Health */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <i className="bi bi-heart-pulse"></i>
+                  حالة قاعدة البيانات
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">اتصالات نشطة</span>
+                    <span className="text-sm font-medium">{systemStats.dbConnections}/100</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                    <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${systemStats.dbConnections}%` }}></div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">استخدام مساحة التخزين</span>
+                    <span className="text-sm font-medium">{systemStats.diskUsage}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                    <div className="bg-green-600 h-2 rounded-full" style={{ width: `${systemStats.diskUsage}%` }}></div>
+                  </div>
+                </div>
+                <div className="pt-2">
+                  <div className="text-xs text-muted-foreground">
+                    آخر نسخة احتياطية: {systemStats.lastBackup ? formatDistanceToNow(systemStats.lastBackup, { addSuffix: true, locale: ar }) : 'غير متوفر'}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* API Monitoring Tab */}
+        <TabsContent value="api" className="space-y-6 mt-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* API Statistics */}
+            <div className="lg:col-span-2 space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <i className="bi bi-graph-up"></i>
+                    إحصائيات API
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600">{apiStats?.totalRequests?.toLocaleString() || '0'}</div>
+                      <div className="text-sm text-muted-foreground">إجمالي الطلبات</div>
+                    </div>
+                    <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                      <div className="text-2xl font-bold text-green-600">{apiStats?.successRate || 0}%</div>
+                      <div className="text-sm text-muted-foreground">معدل النجاح</div>
+                    </div>
+                    <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                      <div className="text-2xl font-bold text-yellow-600">{apiStats?.averageResponseTime || 0}ms</div>
+                      <div className="text-sm text-muted-foreground">متوسط الاستجابة</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>أداء نقاط النهاية</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border border-gray-200 dark:border-gray-700">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-gray-800">
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right">المسار</th>
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">الطلبات</th>
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">النجاح</th>
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">الأخطاء</th>
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">متوسط الزمن</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {apiStats?.endpoints?.map((endpoint: any, index: number) => (
+                          <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 font-mono text-sm">{endpoint.path}</td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">{endpoint.requests?.toLocaleString()}</td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center text-green-600">{endpoint.success?.toLocaleString()}</td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center text-red-600">{endpoint.errors}</td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">{endpoint.avgTime}</td>
+                          </tr>
+                        )) || []}
+                      </tbody>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Error Monitoring */}
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <i className="bi bi-exclamation-triangle"></i>
+                    الأخطاء الأخيرة
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {(apiStats?.recentErrors || []).map((error: any, index: number) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                      <div>
+                        <div className="font-medium text-sm">{error.code} - {error.endpoint}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {error.time ? formatDistanceToNow(new Date(error.time), { addSuffix: true, locale: ar }) : 'غير محدد'}
+                        </div>
+                      </div>
+                      <Badge variant="destructive">{error.count}</Badge>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <i className="bi bi-lightning"></i>
+                    أداء النظام
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>زمن الاستجابة</span>
+                      <span className="text-green-600">245ms</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                      <div className="bg-green-600 h-2 rounded-full" style={{ width: '75%' }}></div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>معدل الطلبات/ثانية</span>
+                      <span className="text-blue-600">127</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: '60%' }}></div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>استخدام الـ CPU</span>
+                      <span className="text-yellow-600">{systemStats.cpuUsage}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                      <div className="bg-yellow-600 h-2 rounded-full" style={{ width: `${systemStats.cpuUsage}%` }}></div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* User Activity Tab */}
+        <TabsContent value="activity" className="space-y-6 mt-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Active Sessions */}
+            <div className="lg:col-span-2 space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <i className="bi bi-people"></i>
+                    الجلسات النشطة
+                  </CardTitle>
+                  <CardDescription>المستخدمون المتصلون حاليًا</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border border-gray-200 dark:border-gray-700">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-gray-800">
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right">المستخدم</th>
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">الدور</th>
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">وقت الدخول</th>
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">النشاط</th>
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">الموقع</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          { name: 'أحمد محمد', role: 'مدير', loginTime: 'منذ ساعتين', activity: 'تصفح التقارير', location: 'الرياض' },
+                          { name: 'فاطمة علي', role: 'موظف', loginTime: 'منذ 30 دقيقة', activity: 'إدارة المخزون', location: 'جدة' },
+                          { name: 'محمد سالم', role: 'موظف', loginTime: 'منذ 15 دقيقة', activity: 'معالجة الطلبات', location: 'الدمام' },
+                          { name: 'نورا أحمد', role: 'مشرف', loginTime: 'منذ ساعة', activity: 'مراجعة البيانات', location: 'المدينة' },
+                          { name: 'خالد يوسف', role: 'موظف', loginTime: 'منذ 10 دقائق', activity: 'إدخال بيانات', location: 'الطائف' }
+                        ].map((user, index) => (
+                          <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                {user.name}
+                              </div>
+                            </td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">
+                              <Badge variant="outline">{user.role}</Badge>
+                            </td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">{user.loginTime}</td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">{user.activity}</td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">{user.location}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <i className="bi bi-clock-history"></i>
+                    سجل تسجيل الدخول الأخير
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {[
+                      { user: 'سارة محمد', time: 'منذ 2 دقيقة', status: 'نجح', ip: '192.168.1.102' },
+                      { user: 'علي أحمد', time: 'منذ 5 دقائق', status: 'نجح', ip: '192.168.1.105' },
+                      { user: 'مجهول', time: 'منذ 8 دقائق', status: 'فشل', ip: '192.168.1.200' },
+                      { user: 'فهد سالم', time: 'منذ 12 دقيقة', status: 'نجح', ip: '192.168.1.108' },
+                      { user: 'مريم علي', time: 'منذ 15 دقيقة', status: 'نجح', ip: '192.168.1.110' }
+                    ].map((login, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <i className={`bi ${login.status === 'نجح' ? 'bi-check-circle text-green-600' : 'bi-x-circle text-red-600'}`}></i>
+                          <div>
+                            <div className="font-medium">{login.user}</div>
+                            <div className="text-sm text-muted-foreground">{login.ip}</div>
+                          </div>
+                        </div>
+                        <div className="text-sm text-muted-foreground">{login.time}</div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Activity Statistics */}
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <i className="bi bi-bar-chart"></i>
+                    إحصائيات النشاط
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">{systemStats.activeUsers}</div>
+                    <div className="text-sm text-muted-foreground">مستخدم نشط</div>
+                  </div>
+                  <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <div className="text-2xl font-bold text-green-600">{systemStats.totalUsers}</div>
+                    <div className="text-sm text-muted-foreground">إجمالي المستخدمين</div>
+                  </div>
+                  <div className="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                    <div className="text-2xl font-bold text-purple-600">47</div>
+                    <div className="text-sm text-muted-foreground">تسجيل دخول اليوم</div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <i className="bi bi-shield-check"></i>
+                    الأدوار النشطة
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {[
+                    { role: 'مدير', count: 2, color: 'bg-red-100 text-red-800' },
+                    { role: 'مشرف', count: 3, color: 'bg-yellow-100 text-yellow-800' },
+                    { role: 'موظف', count: 12, color: 'bg-blue-100 text-blue-800' },
+                    { role: 'عامل', count: 8, color: 'bg-green-100 text-green-800' }
+                  ].map((role, index) => (
+                    <div key={index} className="flex items-center justify-between">
+                      <span className="text-sm">{role.role}</span>
+                      <Badge variant="secondary" className={role.color}>
+                        {role.count}
+                      </Badge>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <i className="bi bi-geo-alt"></i>
+                    المواقع النشطة
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {[
+                    { location: 'الرياض', count: 5 },
+                    { location: 'جدة', count: 3 },
+                    { location: 'الدمام', count: 2 },
+                    { location: 'المدينة', count: 1 },
+                    { location: 'الطائف', count: 1 }
+                  ].map((location, index) => (
+                    <div key={index} className="flex items-center justify-between">
+                      <span className="text-sm">{location.location}</span>
+                      <span className="text-sm font-medium">{location.count}</span>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* Maintenance Tab */}
+        <TabsContent value="maintenance" className="space-y-6 mt-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Scheduled Maintenance */}
+            <div className="lg:col-span-2 space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <i className="bi bi-calendar-check"></i>
+                    المهام المجدولة
+                  </CardTitle>
+                  <CardDescription>مهام الصيانة المجدولة والمؤتمتة</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse border border-gray-200 dark:border-gray-700">
+                      <thead>
+                        <tr className="bg-gray-50 dark:bg-gray-800">
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-right">المهمة</th>
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">النوع</th>
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">الجدولة</th>
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">آخر تشغيل</th>
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">التالي</th>
+                          <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">الحالة</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          { task: 'نسخ احتياطي للبيانات', type: 'backup', schedule: 'يومي - 2:00 ص', lastRun: 'اليوم 2:00 ص', nextRun: 'غدًا 2:00 ص', status: 'نشط' },
+                          { task: 'تحسين قاعدة البيانات', type: 'optimization', schedule: 'أسبوعي - الأحد', lastRun: 'منذ 3 أيام', nextRun: 'بعد 4 أيام', status: 'نشط' },
+                          { task: 'تنظيف ملفات السجل', type: 'cleanup', schedule: 'شهري', lastRun: 'منذ 15 يوم', nextRun: 'بعد 15 يوم', status: 'نشط' },
+                          { task: 'فحص النظام', type: 'health', schedule: 'كل 6 ساعات', lastRun: 'منذ 4 ساعات', nextRun: 'بعد ساعتين', status: 'نشط' },
+                          { task: 'تحديث الإحصائيات', type: 'stats', schedule: 'كل ساعة', lastRun: 'منذ 45 دقيقة', nextRun: 'بعد 15 دقيقة', status: 'نشط' }
+                        ].map((task, index) => (
+                          <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2">
+                              <div className="flex items-center gap-2">
+                                <i className={`bi ${task.type === 'backup' ? 'bi-archive' : task.type === 'optimization' ? 'bi-gear' : task.type === 'cleanup' ? 'bi-trash3' : task.type === 'health' ? 'bi-heart-pulse' : 'bi-graph-up'} text-blue-600`}></i>
+                                {task.task}
+                              </div>
+                            </td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">
+                              <Badge variant="outline">{task.type}</Badge>
+                            </td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">{task.schedule}</td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">{task.lastRun}</td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">{task.nextRun}</td>
+                            <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">
+                              <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+                                {task.status}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <i className="bi bi-tools"></i>
+                    أدوات الصيانة
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                      { name: 'تنظيف ملفات مؤقتة', icon: 'bi-brush', description: 'حذف الملفات المؤقتة وتنظيف المساحة' },
+                      { name: 'إعادة تشغيل الخدمات', icon: 'bi-arrow-clockwise', description: 'إعادة تشغيل جميع الخدمات النظام' },
+                      { name: 'فحص سلامة البيانات', icon: 'bi-check-circle', description: 'التحقق من سلامة قاعدة البيانات' },
+                      { name: 'تحديث التبعيات', icon: 'bi-arrow-up-circle', description: 'تحديث المكتبات والتبعيات' },
+                      { name: 'مراقبة الأداء', icon: 'bi-speedometer2', description: 'تحليل أداء النظام وتحسينه' },
+                      { name: 'أمان النظام', icon: 'bi-shield-check', description: 'فحص الأمان وإصلاح الثغرات' }
+                    ].map((tool, index) => (
+                      <Button key={index} variant="outline" className="h-auto p-4 flex flex-col items-start gap-2">
+                        <div className="flex items-center gap-2 w-full">
+                          <i className={`${tool.icon} text-blue-600`}></i>
+                          <span className="font-medium">{tool.name}</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground text-right">{tool.description}</p>
+                      </Button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* System Health & Controls */}
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <i className="bi bi-cpu"></i>
+                    حالة النظام
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">استخدام المعالج</span>
+                      <span className="text-sm font-medium">{systemStats.cpuUsage}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                      <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${systemStats.cpuUsage}%` }}></div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">استخدام الذاكرة</span>
+                      <span className="text-sm font-medium">{systemStats.memoryUsage}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                      <div className="bg-yellow-600 h-2 rounded-full" style={{ width: `${systemStats.memoryUsage}%` }}></div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">استخدام القرص</span>
+                      <span className="text-sm font-medium">{systemStats.diskUsage}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                      <div className="bg-green-600 h-2 rounded-full" style={{ width: `${systemStats.diskUsage}%` }}></div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <i className="bi bi-power"></i>
+                    التحكم الطارئ
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Button variant="destructive" className="w-full" size="sm">
+                    <i className="bi bi-exclamation-triangle w-4 h-4 ml-2"></i>
+                    إيقاف طارئ للنظام
+                  </Button>
+                  <Button variant="outline" className="w-full" size="sm">
+                    <i className="bi bi-arrow-clockwise w-4 h-4 ml-2"></i>
+                    إعادة تشغيل النظام
+                  </Button>
+                  <Button variant="outline" className="w-full" size="sm">
+                    <i className="bi bi-pause-circle w-4 h-4 ml-2"></i>
+                    وضع الصيانة
+                  </Button>
+                  <Button variant="outline" className="w-full" size="sm">
+                    <i className="bi bi-shield-slash w-4 h-4 ml-2"></i>
+                    الوضع الآمن
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <i className="bi bi-clock-history"></i>
+                    آخر العمليات
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {[
+                    { action: 'نسخ احتياطي', time: 'منذ 2 ساعة', status: 'مكتمل' },
+                    { action: 'تحسين قاعدة البيانات', time: 'منذ 6 ساعات', status: 'مكتمل' },
+                    { action: 'تنظيف الملفات', time: 'أمس', status: 'مكتمل' },
+                    { action: 'فحص الأمان', time: 'منذ يومين', status: 'مكتمل' }
+                  ].map((operation, index) => (
+                    <div key={index} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded">
+                      <div>
+                        <div className="text-sm font-medium">{operation.action}</div>
+                        <div className="text-xs text-muted-foreground">{operation.time}</div>
+                      </div>
+                      <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs">
+                        {operation.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

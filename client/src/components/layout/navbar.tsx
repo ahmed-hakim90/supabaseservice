@@ -1,6 +1,6 @@
-import { useState } from "react";
 import { useAuth } from "../../lib/auth";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,13 +15,6 @@ interface NavbarProps {
 
 export default function Navbar({ onMobileMenuToggle }: NavbarProps) {
   const { user, logout } = useAuth();
-  const [theme, setTheme] = useState("dark");
-
-  const toggleTheme = () => {
-    const newTheme = theme === "dark" ? "light" : "dark";
-    setTheme(newTheme);
-    document.documentElement.className = newTheme;
-  };
 
   return (
     <nav className="bg-card border-b border-border sticky top-0 z-40">
@@ -46,15 +39,7 @@ export default function Navbar({ onMobileMenuToggle }: NavbarProps) {
           </div>
           
           <div className="flex items-center space-x-4 space-x-reverse">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleTheme}
-              className="p-2"
-              data-testid="button-theme-toggle"
-            >
-              <i className={`bi bi-${theme === "dark" ? "sun" : "moon"} text-lg`}></i>
-            </Button>
+            <ThemeToggle variant="button" size="sm" />
             
             <div className="relative">
               <Button variant="ghost" size="sm" className="p-2" data-testid="button-notifications">

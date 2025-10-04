@@ -134,11 +134,106 @@ export default function Reports() {
     };
   };
 
-  const exportReport = (format: 'pdf' | 'excel' | 'csv') => {
-    // Mock export functionality
-    const fileName = `${selectedReport}-${dateRange}-${format}`;
-    console.log(`Exporting ${fileName}`);
-    // In a real application, this would call an API endpoint
+  const exportReport = (exportFormat: 'pdf' | 'excel' | 'csv') => {
+    const { start, end } = getDateRange();
+    let reportData: any[] = [];
+    let headers: string[] = [];
+    let fileName = '';
+
+    // Prepare data based on selected report type
+    switch (selectedReport) {
+      case 'service-requests':
+        reportData = serviceRequests?.filter((req: any) => {
+          const createdAt = new Date(req.createdAt);
+          return createdAt >= start && createdAt <= end;
+        }).map((req: any) => ({
+          id: req.id,
+          priority: req.priority,
+          status: req.status,
+          description: req.description,
+          customer: req.Customer?.name || 'غير محدد',
+          center: req.ServiceCenter?.name || 'غير محدد',
+          createdAt: format(new Date(req.createdAt), 'dd/MM/yyyy HH:mm', { locale: ar }),
+          updatedAt: format(new Date(req.updatedAt), 'dd/MM/yyyy HH:mm', { locale: ar })
+        })) || [];
+        headers = ['الرقم', 'الأولوية', 'الحالة', 'الوصف', 'العميل', 'المركز', 'تاريخ الإنشاء', 'تاريخ التحديث'];
+        fileName = `service-requests-${format(start, 'dd-MM-yyyy')}-to-${format(end, 'dd-MM-yyyy')}`;
+        break;
+
+      case 'users':
+        reportData = users?.filter((user: any) => {
+          const createdAt = new Date(user.createdAt);
+          return createdAt >= start && createdAt <= end;
+        }).map((user: any) => ({
+          id: user.id,
+          fullName: user.fullName,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          createdAt: format(new Date(user.createdAt), 'dd/MM/yyyy', { locale: ar })
+        })) || [];
+        headers = ['الرقم', 'الاسم الكامل', 'البريد الإلكتروني', 'الدور', 'الحالة', 'تاريخ التسجيل'];
+        fileName = `users-${format(start, 'dd-MM-yyyy')}-to-${format(end, 'dd-MM-yyyy')}`;
+        break;
+
+      case 'centers':
+        reportData = centers?.map((center: any) => ({
+          id: center.id,
+          name: center.name,
+          location: center.location,
+          capacity: center.capacity,
+          status: center.status
+        })) || [];
+        headers = ['الرقم', 'اسم المركز', 'الموقع', 'السعة', 'الحالة'];
+        fileName = `centers-${format(new Date(), 'dd-MM-yyyy')}`;
+        break;
+
+      case 'customers':
+        reportData = customers?.filter((customer: any) => {
+          const createdAt = new Date(customer.createdAt);
+          return createdAt >= start && createdAt <= end;
+        }).map((customer: any) => ({
+          id: customer.id,
+          name: customer.name,
+          email: customer.email,
+          phone: customer.phone,
+          address: customer.address,
+          createdAt: format(new Date(customer.createdAt), 'dd/MM/yyyy', { locale: ar })
+        })) || [];
+        headers = ['الرقم', 'الاسم', 'البريد الإلكتروني', 'الهاتف', 'العنوان', 'تاريخ التسجيل'];
+        fileName = `customers-${format(start, 'dd-MM-yyyy')}-to-${format(end, 'dd-MM-yyyy')}`;
+        break;
+
+      default:
+        console.warn('نوع تقرير غير مدعوم:', selectedReport);
+        return;
+    }
+
+    if (reportData.length === 0) {
+      alert('لا توجد بيانات للتصدير في الفترة المحددة');
+      return;
+    }
+
+    // Export based on format
+    if (exportFormat === 'csv') {
+      const csvContent = "data:text/csv;charset=utf-8," + 
+        headers.join(',') + '\n' +
+        reportData.map(row => 
+          Object.values(row).map(value => `"${value || ''}"`).join(',')
+        ).join('\n');
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `${fileName}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      // For PDF and Excel, you would typically call a backend endpoint
+      // Future implementation: call API to generate PDF/Excel reports
+      alert(`سيتم تنفيذ تصدير ${exportFormat.toUpperCase()} في إصدار قادم. تم تصدير ${reportData.length} سجل.`);
+    }
   };
 
   const serviceRequestsStats = getServiceRequestsStats();
